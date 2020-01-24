@@ -45,3 +45,6 @@ XXX
 
 ## Disclaimer
 The software as originally published constitutes a work of the United States Government and is not subject to domestic copyright protection under 17 USC ¤ 105. Subsequent contributions by members of the public, however, retain their original copyright.
+
+## Acknowledgements
+This repository has made use of bits of code from the [RHEAS](https://github.com/nasa/RHEAS) repository and the [cdss-app-snodas-tools](https://github.com/OpenWaterFoundation/cdss-app-snodas-tools) repository and would like to acknowledge their contribution to the success of this code.
