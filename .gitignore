@@ -127,3 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+config/shread_config_test.ini
+testing/shread_testing.ipynb
+
+# Inputs
+*.geojson
+
+# Outputs
+*.tif
+*.aux.xml

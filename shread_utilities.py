@@ -89,7 +89,6 @@ class config_params:
         snodas_sec = "snodas"
         nohrsc_sec = "nohrsc"
         modscag_sec = "modscag"
-        modis_sec = "modis"
 
         # ADD SECTIONS AS NEW SNOW PRODUCTS ARE ADDED
 
@@ -119,12 +118,6 @@ class config_params:
                     "read_config: config file missing [{}] section".format(modscag_sec))
             error_flag = True
             error_modscag_sec_flag = True
-
-        if modis_sec not in cfg_secs:
-            logger.error(
-                    "read_config: config file missing [{}] section".format(modis_sec))
-            error_flag = True
-            error_modis_sec_flag = True
 
         # read file
         # wd section
@@ -521,7 +514,7 @@ def org_snodas(cfg, date_dn):
         tif_out = os.path.splitext(tif)[0] + "_" + basin_str + ".tif"
         try:
             gdal_raster_clip(cfg.basin_poly_path, tif, tif_int)
-            gdal_raster_singleband(tif_int, tiff_out)
+            gdal_raster_singleband(tif_int, tif_out)
             logger.info("org_snodas: clipping {} to {}".format(tif, tif_out))
         except:
             logger.error("org_snodas: error clipping {} to {}".format(tif, tif_out))
@@ -794,11 +787,11 @@ def org_modscag(cfg, date_dn):
         tif_out = os.path.splitext(tif)[0] + "_" + basin_str + ".tif"
         try:
             gdal_raster_clip(cfg.basin_poly_path, tif, tif_out)
-            logger.info("org_snodas: clipping {} to {}".format(tif, tif_out))
+            logger.info("org_modscag: clipping {} to {}".format(tif, tif_out))
         except:
-            logger.error("org_snodas: error clipping {} to {}".format(tif, tif_out))
+            logger.error("org_modscag: error clipping {} to {}".format(tif, tif_out))
     if not tif_list:
-        logger.error("org_snodas: error finding tifs to clip")
+        logger.error("org_modscag: error finding tifs to clip")
 
 
 def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
