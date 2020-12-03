@@ -10,13 +10,13 @@ import ftplib
 import os
 import tarfile
 import gzip
-import gdal
+from osgeo import gdal
 import csv
 import logging
 import glob
-import osr
+from osgeo import osr
 import zipfile
-import ogr
+from osgeo import ogr
 import fileinput
 import datetime as dt
 import configparser
@@ -28,6 +28,8 @@ from requests.auth import HTTPDigestAuth
 import time
 import geojson
 import json
+import rasterstats
+from rasterstats import zonal_stats
 
 Config = configparser.ConfigParser()
 
@@ -121,7 +123,7 @@ class config_params:
 
         # read file
         # wd section
-        if error_wd_sec_flag is False:
+        if error_wd_sec_flag == False:
             logger.info("[wd]")
             #- dir_work
             try:
@@ -188,6 +190,14 @@ class config_params:
                 logger.error("read_config: '{}' missing from [{}] section".format("gdal_path", wd_sec))
                 error_flag = True
 
+            #- python_path
+            try:
+                self.python_path = config.get(wd_sec, "python_path")
+                logger.info("read config: reading 'python_path' {}".format(self.gdal_path))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("python_path", wd_sec))
+                error_flag = True
+
             #- basin_poly_path
             try:
                 self.basin_poly_path = config.get(wd_sec, "basin_poly_path")
@@ -198,7 +208,7 @@ class config_params:
 
         # snodas section
         logger.info("[snodas]")
-        if error_snodas_sec_flag is False:
+        if error_snodas_sec_flag == False:
             #- host_snodas
             try:
                 self.host_snodas = config.get(snodas_sec, "host_snodas")
@@ -241,7 +251,7 @@ class config_params:
 
         # nohrsc section
         logger.info("[nohrsc]")
-        if error_nohrsc_sec_flag is False:
+        if error_nohrsc_sec_flag == False:
             #- host_nohrsc
             try:
                 self.host_nohrsc = config.get(nohrsc_sec, "host_nohrsc")
@@ -276,7 +286,7 @@ class config_params:
 
         # modscag section
         logger.info("[modscag]")
-        if error_modscag_sec_flag is False:
+        if error_modscag_sec_flag == False:
             #- host_modscag
             try:
                 self.host_modscag = config.get(modscag_sec, "host_modscag")
@@ -309,7 +319,7 @@ class config_params:
                 logger.error("read_config: '{}' missing from [{}] section".format("dir_http_modscag", modscag_sec))
                 error_flag = True
 
-        if error_flag is True:
+        if error_flag == True:
             sys.exit()
 
     def proc_config(self):
@@ -404,7 +414,7 @@ def org_snodas(cfg, date_dn):
         logger.info("org_snodas: untaring {}".format(zip_path))
     except:
         logger.error("download_snodas: error untaring {}".format(zip_path))
-    if cfg.arch_flag is True:
+    if cfg.arch_flag == True:
         os.rename(zip_path, zip_arch)
         logger.info("org_snodas: archiving {} to {}".format(zip_path))
     else:
@@ -521,9 +531,24 @@ def org_snodas(cfg, date_dn):
     if not tif_list:
         logger.error("org_snodas: error finding tifs to clip")
 
-    # convert units and set missing value
-    if(cfg.unit_sys is 'english'):
+    # convert units
+    tif_list = glob.glob("{0}/*{1}{2}*{3}*{4}.tif".format(dir_work_snodas, date_str, "05", proj_str, basin_str))
+
+    if cfg.unit_sys == 'english':
         print(cfg.unit_sys)
+        calc_exp = 'A/1000*39.3701'
+    if cfg.unit_sys == 'metric':
+        calc_exp = 'A'
+
+    for tif in tif_list:
+        tif_out = os.path.splitext(tif)[0] + "_" + cfg.unit_sys + ".tif"
+    try:
+        gdal_calc(tif, tif_out, calc_exp)
+        logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
+    except:
+        logger.error("org_snodas: error calc {} to {}".format(tif, tif_out))
+    if not tif_list:
+        logger.error("org_snodas: error finding tifs to calc")
 
 # swe : 1034 [m *1000]
 # snow depth : 1036 [m *1000]
@@ -534,6 +559,14 @@ def org_snodas(cfg, date_dn):
 # liquid precipitation: 1025(v code = IL00) [kg m-2 *10]
 # snowpack average temperature: 1038 [K *1]
 
+    # calculate zonal statistics
+    tif_list = glob.glob("{0}/*{1}{2}*{3}*{4}*{5}.tif".format(dir_work_snodas, date_str, "05", proj_str, basin_str, cfg.unit_sys))
+    for tif in tif_list:
+        geojson_out = os.path.splitext(tif)[0] + "_" + cfg.unit_sys + ".geojson"
+        tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats = ['min', 'max', 'median', 'mean'], geojson_out = True)
+        tif_stats_fmt = {"type": "FeatureCollection","features": tif_stats}
+        with open(geojson_out, 'w') as outfile:
+            geojson.dump(tif_stats_fmt, outfile)
 
 # ---- archive files
 def download_srpt(cfg, date_dn, overwrite_flag = False):
@@ -565,7 +598,7 @@ def download_srpt(cfg, date_dn, overwrite_flag = False):
 
     if os.path.isfile(kmz_srpt_path) and overwrite_flag:
         os.remove(kmz_srpt_path)
-    if os.path.isfile(kmz_srpt_path) and overwrite_flag is False:
+    if os.path.isfile(kmz_srpt_path) and overwrite_flag == False:
         logger.info("download_srpt: skipping {} {}, {} exists".format('snow reports', date_dn.strftime('%Y-%m-%d'), kmz_srpt_path))
     if not os.path.isfile(kmz_srpt_path):
         logger.info("download_srpt: downloading {} {}".format('snow reports', date_dn.strftime('%Y-%m-%d')))
@@ -630,7 +663,7 @@ def download_nsa(cfg, date_dn, overwrite_flag = False):
 
     if os.path.isfile(tif_24hr_path) and overwrite_flag:
         os.remove(tif_24hr_path)
-    if os.path.isfile(tif_24hr_path) and overwrite_flag is False:
+    if os.path.isfile(tif_24hr_path) and overwrite_flag == False:
         logger.info("download_nsa: skipping {} {}, {} exists".format('24hr', date_dn.strftime('%Y-%m-%d'), tif_24hr_path))
     if not os.path.isfile(tif_24hr_path):
         logger.info("download_nsa: downloading {} {}".format('24hr', date_dn.strftime('%Y-%m-%d')))
@@ -680,7 +713,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
 
             if os.path.isfile(tif_fsca_path) and overwrite_flag:
                 os.remove(tif_fsca_path)
-            if os.path.isfile(tif_fsca_path) and overwrite_flag is False:
+            if os.path.isfile(tif_fsca_path) and overwrite_flag == False:
                 logger.info("download_modscag: skipping {} {}, {} exists".format(date_dn.strftime('%Y-%m-%d'), tile, tif_fsca_path))
             if not os.path.isfile(tif_fsca_path):
                 logger.info("download_modscag: downloading {} {} {}".format('snow_fraction', date_dn.strftime('%Y-%m-%d'), tile))
@@ -704,7 +737,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
 
                 if os.path.isfile(tif_vfrac_path) and overwrite_flag:
                     os.remove(tif_vfrac_path)
-                if os.path.isfile(tif_vfrac_path) and overwrite_flag is False:
+                if os.path.isfile(tif_vfrac_path) and overwrite_flag == False:
                     logger.info("download_modscag: skipping {} {}, {} exists".format(date_dn.strftime('%Y-%m-%d'), tile, tif_vfrac_path))
                 if not os.path.isfile(tif_vfrac_path):
                     logger.info("download_modscag: downloading {} {} {}".format('vegetation_fraction', date_dn.strftime('%Y-%m-%d'), tile))
@@ -819,7 +852,7 @@ def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
 
     """
 
-    if crs_in is not None:
+    if crs_in != None:
         os.system("gdalwarp -s_srs {0} -t_srs {1} {2} {3}".format(crs_in, crs_out, file_in, file_out))
     else:
         os.system("gdalwarp -t_srs {0} {1} {2}".format(crs_out, file_in, file_out))
@@ -850,10 +883,32 @@ def gdal_raster_merge(file_list_in, file_out):
     cmd_string = " ".join(cmd_list)
     os.system(cmd_string)
 
-def gdal_calc():
-    gdal_calc = os.path.join(cfg.gdal_path, 'gdal_calc.py')
+def gdal_calc(rast_in, rast_out, calc_exp):
+    """wrapper around gdal_calc for raster math
+    Parameters
+    ---------
+        rast_in: string
+            file path of input raster
+        rast_out: string
+            file path of output raster
+        calc_exp: string
+            raster math expression
 
-def gdal_raster_clip(poly_in, rast_in, rast_out):
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    Requires gdal_path be set in config ini file and gdal be available
+    Only set up to work with single raster
+
+    """
+    gdal_calc = os.path.join(cfg.gdal_path, 'gdal_calc.py')
+    os.system('{0} {1} -A {2} --outfile {3} --calc="{4}"'.format(cfg.python_path, gdal_calc, rast_in, rast_out, calc_exp))
+
+
+def gdal_raster_clip(poly_in, rast_in, rast_out, crs_in, crs_out, nodata):
     """wrapper around gdalwarp for clipping rasters with polygon
     Parameters
     ---------
@@ -864,6 +919,15 @@ def gdal_raster_clip(poly_in, rast_in, rast_out):
             file path of input raster
         rast_out: string
             file path of output raster
+        crs_out: string
+            EPSG spatial reference for output raster coordinate system in
+                'EPSG:X' format
+        crs_in: string
+            EPSG spatial reference for input raster coordinate system
+                Default - None as gdalwarp can read coordinate system of
+                input raster if available
+        nodata:
+            nodata value or character
 
     Returns
     -------
@@ -876,7 +940,7 @@ def gdal_raster_clip(poly_in, rast_in, rast_out):
 
     """
 
-    os.system("gdalwarp -cutline {0} -crop_to_cutline -dstalpha {1} {2}".format(poly_in, rast_in, rast_out))
+    os.system("gdalwarp -s_srs {0} -t_srs {1} -of GTiff -cutline {2} -crop_to_cutline -dstnodata {3} {4} {5}".format(crs_in, crs_out, poly_in, nodata, rast_in, rast_out))
     # error handling
 
 def gdal_raster_singleband(rast_in, rast_out, band = 1):
@@ -1611,7 +1675,7 @@ def find_tiles(bbox):
             return polyr.Intersects(polyb)
         else:
             return False
-    if bbox is None:
+    if bbox == None:
         logger.error("find_tiles: error with spatial area")
         ids = None
     else:

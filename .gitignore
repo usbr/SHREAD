@@ -136,3 +136,11 @@ testing/shread_testing.ipynb
 # Outputs
 *.tif
 *.aux.xml
+gdal_calc.py
+testing/gdal_testing.ipynb
+testing/setup commands.txt
+.idea/inspectionProfiles/profiles_settings.xml
+.idea/modules.xml
+.idea/SHREAD.iml
+.idea/vcs.xml
+.idea/workspace.xml
