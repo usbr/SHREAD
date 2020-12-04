@@ -144,3 +144,5 @@ testing/setup commands.txt
 .idea/SHREAD.iml
 .idea/vcs.xml
 .idea/workspace.xml
+data/database/snodas_snowdepth_20190205_Bighorn_HUC8_EPSG5070_english_.csv
+data/database/snodas_swe_20190205_Bighorn_HUC8_EPSG5070_english_.csv

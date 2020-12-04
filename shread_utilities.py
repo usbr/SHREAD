@@ -30,6 +30,7 @@ import geojson
 import json
 import rasterstats
 from rasterstats import zonal_stats
+import pandas as pd
 
 Config = configparser.ConfigParser()
 
@@ -532,21 +533,35 @@ def org_snodas(cfg, date_dn):
         logger.error("org_snodas: error finding tifs to clip")
 
     # convert units
-    tif_list = glob.glob("{0}/*{1}{2}*{3}*{4}.tif".format(dir_work_snodas, date_str, "05", proj_str, basin_str))
-
     if cfg.unit_sys == 'english':
         print(cfg.unit_sys)
         calc_exp = 'A/1000*39.3701'
     if cfg.unit_sys == 'metric':
         calc_exp = 'A'
 
+    # SWE
+    tif_list = glob.glob("{0}/*{1}*{2}{3}*{4}*{5}.tif".format(dir_work_snodas, '1034', date_str, "05", proj_str, basin_str))
+
     for tif in tif_list:
-        tif_out = os.path.splitext(tif)[0] + "_" + cfg.unit_sys + ".tif"
-    try:
-        gdal_calc(tif, tif_out, calc_exp)
-        logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
-    except:
-        logger.error("org_snodas: error calc {} to {}".format(tif, tif_out))
+        tif_out = cfg.dir_db + "snodas_swe_" + date_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
+        try:
+            gdal_calc(tif, tif_out, calc_exp)
+            logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
+        except:
+            logger.error("org_snodas: error calc {} to {}".format(tif, tif_out))
+    if not tif_list:
+        logger.error("org_snodas: error finding tifs to calc")
+
+    # Snow Depth
+    tif_list = glob.glob("{0}/*{1}*{2}{3}*{4}*{5}.tif".format(dir_work_snodas, '1036', date_str, "05", proj_str, basin_str))
+
+    for tif in tif_list:
+        tif_out = cfg.dir_db + "snodas_snowdepth_" + date_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
+        try:
+            gdal_calc(tif, tif_out, calc_exp)
+            logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
+        except:
+            logger.error("org_snodas: error calc {} to {}".format(tif, tif_out))
     if not tif_list:
         logger.error("org_snodas: error finding tifs to calc")
 
@@ -559,16 +574,44 @@ def org_snodas(cfg, date_dn):
 # liquid precipitation: 1025(v code = IL00) [kg m-2 *10]
 # snowpack average temperature: 1038 [K *1]
 
-    # calculate zonal statistics
-    tif_list = glob.glob("{0}/*{1}{2}*{3}*{4}*{5}.tif".format(dir_work_snodas, date_str, "05", proj_str, basin_str, cfg.unit_sys))
+    # calculate zonal statistics and export data
+    tif_list = glob.glob("{0}/{1}*{2}*{3}*{4}.tif".format(cfg.dir_db, 'snodas', date_str, basin_str, cfg.unit_sys))
+    basin_poly = geopandas.read_file(cfg.basin_poly_path)
     for tif in tif_list:
-        geojson_out = os.path.splitext(tif)[0] + "_" + cfg.unit_sys + ".geojson"
-        tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats = ['min', 'max', 'median', 'mean'], geojson_out = True)
-        tif_stats_fmt = {"type": "FeatureCollection","features": tif_stats}
-        with open(geojson_out, 'w') as outfile:
-            geojson.dump(tif_stats_fmt, outfile)
+        try:
+            tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats = ['min', 'max', 'median', 'mean'])
+            tif_stats_df = pd.DataFrame(tif_stats)
+            logger.info("org_snodas: computing zonal statistics")
+        except:
+            logger.error("org_snodas: error computing zonal statistics")
+        try:
+            frames = [basin_poly, tif_stats_df]
+            basin_poly_stats = pd.concat(frames, axis = 1)
+            logger.info("org_snodas: merging zonal statistics")
+        except:
+            logger.error("org_snodas: error merging zonal statistics")
+        try:
+            geojson_out = os.path.splitext(tif)[0] + ".geojson"
+            basin_poly_stats.to_file(geojson_out, driver = 'GeoJSON')
+            logger.info("org_snodas: writing {0}".format(geojson_out))
+        except:
+            logger.error("org_snodas: error writing {0}".format(csv_out))
+        try:
+            csv_out = os.path.splitext(tif)[0] + "_" + ".csv"
+            basin_poly_stats.to_csv(csv_out)
+            logger.info("org_snodas: writing {0}".format(csv_out))
+        except:
+            logger.error("org_snodas: error writing {0}".format(csv_out))
 
-# ---- archive files
+    # clean up working directory
+    for file in os.listdir(dir_work_snodas):
+        file_path = dir_work_snodas + file
+        try:
+            os.remove(file_path)
+            logger.info("org_snodas: removing {}".format(file_path))
+        except:
+            logger.error("org_snodas: error removing {}".format(file_path))
+
 def download_srpt(cfg, date_dn, overwrite_flag = False):
     """Download snow reports from nohrsc
 
