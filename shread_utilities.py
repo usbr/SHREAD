@@ -30,6 +30,7 @@ import geojson
 import json
 import rasterstats
 from rasterstats import zonal_stats
+import geopandas
 import pandas as pd
 
 Config = configparser.ConfigParser()
@@ -521,11 +522,9 @@ def org_snodas(cfg, date_dn):
     # clip to basin polygon
     tif_list = glob.glob("{0}/*{1}{2}*{3}.tif".format(dir_work_snodas, date_str, "05", proj_str))
     for tif in tif_list:
-        tif_int = os.path.splitext(tif)[0] + "_singleband_tmp.tif"
         tif_out = os.path.splitext(tif)[0] + "_" + basin_str + ".tif"
         try:
-            gdal_raster_clip(cfg.basin_poly_path, tif, tif_int)
-            gdal_raster_singleband(tif_int, tif_out)
+            gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, cfg.proj, cfg.proj, -9999)
             logger.info("org_snodas: clipping {} to {}".format(tif, tif_out))
         except:
             logger.error("org_snodas: error clipping {} to {}".format(tif, tif_out))
@@ -598,7 +597,8 @@ def org_snodas(cfg, date_dn):
             logger.error("org_snodas: error writing {0}".format(csv_out))
         try:
             csv_out = os.path.splitext(tif)[0] + "_" + ".csv"
-            basin_poly_stats.to_csv(csv_out)
+            basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+            basin_poly_stats_df.to_csv(csv_out)
             logger.info("org_snodas: writing {0}".format(csv_out))
         except:
             logger.error("org_snodas: error writing {0}".format(csv_out))
