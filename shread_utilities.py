@@ -533,10 +533,9 @@ def org_snodas(cfg, date_dn):
 
     # convert units
     if cfg.unit_sys == 'english':
-        print(cfg.unit_sys)
-        calc_exp = 'A/1000*39.3701'
+        calc_exp = 'A/1000*39.3701' # convert from mm to inches
     if cfg.unit_sys == 'metric':
-        calc_exp = 'A'
+        calc_exp = 'A' # keep units in mm
 
     # SWE
     tif_list = glob.glob("{0}/*{1}*{2}{3}*{4}*{5}.tif".format(dir_work_snodas, '1034', date_str, "05", proj_str, basin_str))
@@ -668,6 +667,100 @@ def org_srpt(cfg, date_dn):
         None
 
     """
+    # TODO - GENERALIZE BELOW, ADD ERROR CHECKING
+    #   ADD UNIT CONVERSION IF NEEDED
+    #   ADD CLIPPING BY BASIN BOUNDARY - OPTION TO SPECIFY AN ALTERNATE BOUNDARY?
+    #   MOVE REQUIRED PACAKGE IMPORTS TO TOP
+    # https://stackoverflow.com/questions/55586376/how-to-obtain-element-values-from-a-kml-by-using-lmxl
+    from lxml import etree
+    import pandas as pd
+
+    kmz_path = 'C:/Projects/git/SHREAD/data/working/srpt/snow_reporters_20190401.kmz'
+
+    with zipfile.ZipFile(path,"r") as zip_ref:
+        zip_ref.extractall("C:/Projects/git/SHREAD/data/working/srpt/")
+
+    kml_path = 'C:/Projects/git/SHREAD/data/working/srpt/snow_reporters_20190401.kml'
+
+    gpd.io.file.fiona.drvsupport.supported_drivers['KML'] = 'rw'
+
+    srpt_gpd = gpd.GeoDataFrame()
+    # iterate over layers
+    for layer in fiona.listlayers(kmlfileout):
+        s = gpd.read_file(kml_path, driver='KML', layer=layer)
+        srpt_gpd = srpt_gpd.append(s, ignore_index=True)
+    ns = {"kml": "http://earth.google.com/kml/2.0"}
+
+    # parse kmlfile
+    tree = etree.parse(kml_path)
+
+    # read name - character
+    name_arr = []
+    for simple_data in tree.xpath("/kml:kml/kml:Document/kml:Folder/kml:Placemark/kml:name", namespaces = ns):
+        name_arr.append(simple_data.text)
+    name_pd = pd.Series(name_arr, name = 'Name')
+
+    # read beginDate - Datetime
+    beginDate_arr = []
+    for simple_data in tree.xpath("/kml:kml/kml:Document/kml:Folder/kml:Placemark/kml:ExtendedData/kml:Data[@name='beginDate']/kml:value", namespaces = ns):
+        beginDate_arr.append(simple_data.text)
+    beginDate_pd = pd.Series(beginDate_arr, name = 'beginDate')
+    beginDate_pd = pd.to_datetime(beginDate_pd, format='%Y-%m-%d', errors='coerce')
+
+    # read endDate - Datetime
+    endDate_arr = []
+    for simple_data in tree.xpath("/kml:kml/kml:Document/kml:Folder/kml:Placemark/kml:ExtendedData/kml:Data[@name='endDate']/kml:value", namespaces = ns):
+        endDate_arr.append(simple_data.text)
+    endDate_pd = pd.Series(endDate_arr, name = 'endDate')
+    endDate_pd = pd.to_datetime(endDate_pd, format='%Y-%m-%d', errors='coerce')
+
+    # read type - character
+    type_arr = []
+    for simple_data in tree.xpath("/kml:kml/kml:Document/kml:Folder/kml:Placemark/kml:ExtendedData/kml:Data[@name='type']/kml:value", namespaces = ns):
+        type_arr.append(simple_data.text)
+    type_pd = pd.Series(type_arr, name = 'type')
+
+    # read elevationMeters - numeric
+    elevationMeters_arr = []
+    for simple_data in tree.xpath("/kml:kml/kml:Document/kml:Folder/kml:Placemark/kml:ExtendedData/kml:Data[@name='elevationMeters']/kml:value", namespaces = ns):
+        elevationMeters_arr.append(simple_data.text)
+    elevationMeters_pd = pd.Series(elevationMeters_arr, name = 'elevationMeters')
+    elevationMeters_pd = pd.to_numeric(elevationMeters_pd, errors='coerce')
+
+    # read latestSWEdateUTC - Datetime
+    latestSWEdateUTC_arr = []
+    for simple_data in tree.xpath("/kml:kml/kml:Document/kml:Folder/kml:Placemark/kml:ExtendedData/kml:Data[@name='latestSWEdateUTC']/kml:value", namespaces = ns):
+        latestSWEdateUTC_arr.append(simple_data.text)
+    latestSWEdateUTC_pd = pd.Series(latestSWEdateUTC_arr, name = 'latestSWEdateUTC')
+    latestSWEdateUTC_pd = pd.to_datetime(latestSWEdateUTC_pd, format='%Y-%m-%d', errors='coerce')
+
+    # read latestSWEcm - numeric
+    latestSWEcm_arr = []
+    for simple_data in tree.xpath("/kml:kml/kml:Document/kml:Folder/kml:Placemark/kml:ExtendedData/kml:Data[@name='latestSWEcm']/kml:value", namespaces = ns):
+        latestSWEcm_arr.append(simple_data.text)
+    latestSWEcm_pd = pd.Series(latestSWEcm_arr, name = 'latestSWEcm')
+    latestSWEcm_pd = pd.to_numeric(latestSWEcm_pd, errors='coerce')
+
+    # read latestDepthDateUTC - Datetime
+    latestDepthDateUTC_arr = []
+    for simple_data in tree.xpath("/kml:kml/kml:Document/kml:Folder/kml:Placemark/kml:ExtendedData/kml:Data[@name='latestDepthDateUTC']/kml:value", namespaces = ns):
+        latestDepthDateUTC_arr.append(simple_data.text)
+    latestDepthDateUTC_pd = pd.Series(latestDepthDateUTC_arr, name = 'latestDepthDateUTC')
+    latestDepthDateUTC_pd = pd.to_datetime(latestDepthDateUTC_pd, format='%Y-%m-%d', errors='coerce')
+
+    # read latestDepthCm - numeric
+    latestDepthCm_arr = []
+    for simple_data in tree.xpath("/kml:kml/kml:Document/kml:Folder/kml:Placemark/kml:ExtendedData/kml:Data[@name='latestDepthCm']/kml:value", namespaces = ns):
+        latestDepthCm_arr.append(simple_data.text)
+    latestDepthCm_pd = pd.Series(latestDepthCm_arr, name = 'latestDepthCm')
+    latestDepthCm_pd = pd.to_numeric(latestDepthCm_pd, errors='coerce')
+
+    srpt_pd = pd.concat([name_pd, beginDate_pd, endDate_pd, type_pd, elevationMeters_pd, latestSWEdateUTC_pd,
+                   latestSWEcm_pd, latestDepthDateUTC_pd, latestDepthCm_pd], axis = 1)
+
+    srpt_gpd = srpt_gpd.set_index('Name').join(srpt_pd.set_index('Name'))
+
+
 
 def download_nsa(cfg, date_dn, overwrite_flag = False):
     """Download national snow analysis from nohrsc
