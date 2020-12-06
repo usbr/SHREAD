@@ -34,7 +34,7 @@ import geopandas as gpd
 import pandas as pd
 from lxml import etree
 import fiona
-
+import rasterio
 
 def main(config_path, start_date, end_date, time_int, prod_str):
     """SHREAD main function
@@ -621,9 +621,11 @@ def org_snodas(cfg, date_dn):
 
     # convert units
     if cfg.unit_sys == 'english':
-        calc_exp = 'A/1000*39.3701' # convert from mm to inches
+        # calc_exp = 'A/1000*39.3701' # convert from mm to inches
+        calc_exp = '(+ 1 (* 0.0393701 (read 1)))'
     if cfg.unit_sys == 'metric':
-        calc_exp = 'A' # keep units in mm
+        # calc_exp = 'A'
+        calc_exp = '(read 1)' # keep units in mm
 
     # SWE
     tif_list = glob.glob("{0}/*{1}*{2}{3}*{4}*{5}.tif".format(dir_work_snodas, '1034', date_str, "05", proj_str, basin_str))
@@ -631,7 +633,8 @@ def org_snodas(cfg, date_dn):
     for tif in tif_list:
         tif_out = cfg.dir_db + "snodas_swe_" + date_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
         try:
-            gdal_calc(tif, tif_out, calc_exp)
+            # gdal_calc(tif, tif_out, calc_exp)
+            rio_calc(tif, tif_out, calc_exp)
             logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
         except:
             logger.error("org_snodas: error calc {} to {}".format(tif, tif_out))
@@ -683,7 +686,7 @@ def org_snodas(cfg, date_dn):
         except:
             logger.error("org_snodas: error writing {0}".format(csv_out))
         try:
-            csv_out = os.path.splitext(tif)[0] + "_" + ".csv"
+            csv_out = os.path.splitext(tif)[0] + ".csv"
             basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
             basin_poly_stats_df.to_csv(csv_out)
             logger.info("org_snodas: writing {0}".format(csv_out))
@@ -1159,8 +1162,28 @@ def gdal_calc(rast_in, rast_out, calc_exp):
 
     """
     gdal_calc = os.path.join(cfg.gdal_path, 'gdal_calc.py')
-    os.system('{0} {1} -A {2} --outfile {3} --calc="{4}" --overwrite'.format(cfg.python_path, gdal_calc, rast_in, rast_out, calc_exp))
+    os.system('{0} {1} -A {2} --outfile {3} --calc="{4}"'.format(cfg.python_path, gdal_calc, rast_in, rast_out, calc_exp))
 
+def rio_calc(rast_in, rast_out, calc_exp):
+    """wrapper around rio calc from rasterio package for raster math
+    Parameters
+    ---------
+        rast_in: string
+            file path of input raster
+        rast_out: string
+            file path of output raster
+        calc_exp: string
+            raster math expression
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    Requires rasterio
+    """
+    os.system('rio calc "{0}" {1} {2}'.format(calc_exp, rast_in, rast_out))
 
 def gdal_raster_clip(poly_in, rast_in, rast_out, crs_in, crs_out, nodata):
     """wrapper around gdalwarp for clipping rasters with polygon

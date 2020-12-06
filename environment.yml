@@ -8,5 +8,9 @@ dependencies:
   - requests
   - configparser
   - geojson
-  - jupyterlab
+  - pandas
   - geopandas
+  - fiona
+  - lxml
+  - rasterstats
+  - rasterio

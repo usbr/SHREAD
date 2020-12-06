@@ -147,7 +147,6 @@ data/database/*
 data/working/snodas/*
 data/working/modscag/*
 .idea*
-config/shread_config_test.ini
 config/shread_config_example.ini
 data/database/snodas_snowdepth_20190410_Bighorn_HUC8_EPSG5070_english_.csv
 data/database/snodas_swe_20190410_Bighorn_HUC8_EPSG5070_english_.csv
@@ -159,9 +158,6 @@ data/working/srpt/palette-station.png
 data/database/snodas_swe_20190410_Bighorn_HUC8_EPSG5070_english_.csv
 data/database/snodas_snowdepth_20190410_Bighorn_HUC8_EPSG5070_english_.csv
 resources/ElevationBandToolNotes
-testing/kml_testing.ipynb
-data/working/srpt/snow_reporters_20190330.kml
-data/working/srpt/snow_reporters_20190330.kmz
 *.ipynb
 *.kml
 *.kmz
