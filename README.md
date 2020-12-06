@@ -41,7 +41,9 @@ Support for additional products is in development or planned, including -
 <sup>a</sup> SHREAD currently requires GDAL to perform geospatial tasks. Installation instructions for GDAL can be found XXX. Model development is adding in optional ArcPy support to replace GDAL, however this support is not yet complete.
 
 ## Use
-XXX
+    conda env create -f environment.yml
+    conda activate shread
+    python shread.py -i [config_file] -s [%Y%m%d] -d [%Y%m%d] -t [D] -p [snodas,srpt,modscag]
 
 ## Disclaimer
 The software as originally published constitutes a work of the United States Government and is not subject to domestic copyright protection under 17 USC ¤ 105. Subsequent contributions by members of the public, however, retain their original copyright.
