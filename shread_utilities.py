@@ -32,6 +32,8 @@ import rasterstats
 from rasterstats import zonal_stats
 import geopandas
 import pandas as pd
+from lxml import etree
+import fiona
 
 Config = configparser.ConfigParser()
 
@@ -666,27 +668,32 @@ def org_srpt(cfg, date_dn):
     -------
         None
 
+    Notes
+    -----
+        Writes out geoJSON and csv to file
+
     """
-    # TODO - GENERALIZE BELOW, ADD ERROR CHECKING
-    #   ADD UNIT CONVERSION IF NEEDED
-    #   ADD CLIPPING BY BASIN BOUNDARY - OPTION TO SPECIFY AN ALTERNATE BOUNDARY?
-    #   MOVE REQUIRED PACAKGE IMPORTS TO TOP
+    # TODO - ADD ERROR CHECKING
+    #  OPTION TO SPECIFY AN ALTERNATE BOUNDARY?
     # https://stackoverflow.com/questions/55586376/how-to-obtain-element-values-from-a-kml-by-using-lmxl
-    from lxml import etree
-    import pandas as pd
 
-    kmz_path = 'C:/Projects/git/SHREAD/data/working/srpt/snow_reporters_20190401.kmz'
+    basin_str = os.path.splitext(os.path.basename(cfg.basin_poly_path))[0]
+    dir_work_d = cfg.dir_work + 'srpt/'
 
-    with zipfile.ZipFile(path,"r") as zip_ref:
-        zip_ref.extractall("C:/Projects/git/SHREAD/data/working/srpt/")
+    # snow reports (stations)
+    kmz_srpt_name = "snow_reporters_" + date_dn.strftime('%Y%m%d') + ".kmz"
+    kmz_srpt_path = dir_work_d + kmz_srpt_name
 
-    kml_path = 'C:/Projects/git/SHREAD/data/working/srpt/snow_reporters_20190401.kml'
+    with zipfile.ZipFile(kmz_srpt_path,"r") as zip_ref:
+        zip_ref.extractall(dir_work_d)
+
+    kml_path = kmz_srpt_path.replace('.kmz', '.kml')
 
     gpd.io.file.fiona.drvsupport.supported_drivers['KML'] = 'rw'
 
     srpt_gpd = gpd.GeoDataFrame()
     # iterate over layers
-    for layer in fiona.listlayers(kmlfileout):
+    for layer in fiona.listlayers(kml_path):
         s = gpd.read_file(kml_path, driver='KML', layer=layer)
         srpt_gpd = srpt_gpd.append(s, ignore_index=True)
     ns = {"kml": "http://earth.google.com/kml/2.0"}
@@ -760,6 +767,23 @@ def org_srpt(cfg, date_dn):
 
     srpt_gpd = srpt_gpd.set_index('Name').join(srpt_pd.set_index('Name'))
 
+    # unit conversion
+    if cfg.unit_sys == 'english':
+        srpt_gpd.loc[:, 'elevationFeet'] = srpt_gpd.loc[:, 'elevationMeters'].values * 3.28084
+        srpt_gpd.loc[:, 'latestSWEin'] = srpt_gpd.loc[:, 'latestSWEcm'].values * 0.393701
+        srpt_gpd.loc[:, 'latestDepthin'] = srpt_gpd.loc[:, 'latestDepthCm'].values * 0.393701
+        srpt_gpd = srpt_gpd.drop(columns=['elevationMeters', 'latestSWEcm', 'latestDepthCm'])
+
+    # clip to basin
+    basin_poly = geopandas.read_file(cfg.basin_poly_path)
+    srpt_gpd_clip = gpd.clip(srpt_gpd.to_crs(cfg.proj), basin_poly, keep_geom_type = False)
+
+    # write out data
+    geojson_out = cfg.dir_db + 'snow_reporters_' + date_dn.strftime('%Y%m%d') + '_' + basin_str + '.geojson'
+    srpt_gpd_clip.to_file(geojson_out, driver = 'GeoJSON')
+    csv_out = cfg.dir_db + 'snow_reporters_' + date_dn.strftime('%Y%m%d') + '_' + basin_str + '.csv'
+    srpt_gpd_clip_df = pd.DataFrame(srpt_gpd_clip.drop(columns = 'geometry'))
+    srpt_gpd_clip_df.to_csv(csv_out)
 
 
 def download_nsa(cfg, date_dn, overwrite_flag = False):
