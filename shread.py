@@ -621,10 +621,8 @@ def org_snodas(cfg, date_dn):
 
     # convert units
     if cfg.unit_sys == 'english':
-        # calc_exp = 'A/1000*39.3701' # convert from mm to inches
-        calc_exp = '(+ 1 (* 0.0393701 (read 1)))'
+        calc_exp = '(+ 1 (* 39.3701 (read 1)))' # inches x 1000
     if cfg.unit_sys == 'metric':
-        # calc_exp = 'A'
         calc_exp = '(read 1)' # keep units in mm
 
     # SWE
@@ -633,7 +631,6 @@ def org_snodas(cfg, date_dn):
     for tif in tif_list:
         tif_out = cfg.dir_db + "snodas_swe_" + date_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
         try:
-            # gdal_calc(tif, tif_out, calc_exp)
             rio_calc(tif, tif_out, calc_exp)
             logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
         except:
@@ -676,6 +673,12 @@ def org_snodas(cfg, date_dn):
         try:
             frames = [cfg.basin_poly, tif_stats_df]
             basin_poly_stats = pd.concat(frames, axis = 1)
+            # convert units from inches x 1000 to inches
+            if(cfg.unit_sys == 'english'):
+                basin_poly_stats.loc[:, 'min'] = basin_poly_stats.loc[:, 'min'].values / 100
+                basin_poly_stats.loc[:, 'max'] = basin_poly_stats.loc[:, 'max'].values / 100
+                basin_poly_stats.loc[:, 'mean'] = basin_poly_stats.loc[:, 'mean'].values / 100
+                basin_poly_stats.loc[:, 'median'] = basin_poly_stats.loc[:, 'median'].values / 100
             logger.info("org_snodas: merging zonal statistics")
         except:
             logger.error("org_snodas: error merging zonal statistics")
