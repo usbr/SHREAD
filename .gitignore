@@ -163,3 +163,5 @@ testing/kml_testing.ipynb
 data/working/srpt/snow_reporters_20190330.kml
 data/working/srpt/snow_reporters_20190330.kmz
 *.ipynb
+*.kml
+*.kmz
