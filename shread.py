@@ -30,11 +30,13 @@ import geojson
 import json
 import rasterstats
 from rasterstats import zonal_stats
-import geopandas as gpd
+import numpy as np
 import pandas as pd
+import geopandas as gpd
 from lxml import etree
 import fiona
 import rasterio
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 
 def main(config_path, start_date, end_date, time_int, prod_str):
     """SHREAD main function
@@ -601,6 +603,7 @@ def org_snodas(cfg, date_dn):
         tif_out = os.path.splitext(tif)[0] + "_" + proj_str + ".tif"
         try:
             gdal_raster_reproject(tif, tif_out, cfg.proj, crs_raw)
+            # rasterio_raster_reproject(tif, tif_out, cfg.proj)
             logger.info("org_snodas: reprojecting {} to {}".format(tif, tif_out))
         except:
             logger.error("org_snodas: error reprojecting {} to {}".format(tif, tif_out))
@@ -644,7 +647,7 @@ def org_snodas(cfg, date_dn):
     for tif in tif_list:
         tif_out = cfg.dir_db + "snodas_snowdepth_" + date_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
         try:
-            gdal_calc(tif, tif_out, calc_exp)
+            rio_calc(tif, tif_out, calc_exp)
             logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
         except:
             logger.error("org_snodas: error calc {} to {}".format(tif, tif_out))
@@ -1055,6 +1058,7 @@ def org_modscag(cfg, date_dn):
         logger.error("org_modscag: error merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'snow_fraction'))
     try:
         gdal_raster_reproject(tif_out_fsca.format("ext"), tif_out_fsca.format(proj_str), cfg.proj)
+        # rasterio_raster_reproject(tif_out_fsca.format("ext"), tif_out_fsca.format(proj_str), cfg.proj)
         logger.info("org_modscag: reprojecting {} to {}".format('snow_fraction', date_dn.strftime('%Y-%m-%d')))
     except:
         logger.error("org_modscag: error reprojecting {} to {}".format(tif_out_fsca.format("ext"), tif_out_fsca.format(proj_str), cfg.proj))
@@ -1070,6 +1074,7 @@ def org_modscag(cfg, date_dn):
         logger.error("org_modscag: error merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'vegetation_fraction'))
     try:
         gdal_raster_reproject(tif_out_vfrac.format("ext"), tif_out_vfrac.format(proj_str), cfg.proj)
+        # rasterio_raster_reproject(tif_out_vfrac.format("ext"), tif_out_vfrac.format(proj_str), cfg.proj)
         logger.info("org_modscag: reprojecting {} to {}".format('vegetation_fraction', date_dn.strftime('%Y-%m-%d')))
     except:
         logger.error("org_modscag: error reprojecting {} to {}".format(tif_out_vfrac.format("ext"), tif_out_vfrac.format(proj_str), cfg.proj))
@@ -1117,6 +1122,52 @@ def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
     else:
         os.system("gdalwarp -t_srs {0} {1} {2}".format(crs_out, file_in, file_out))
     # error handling
+
+def rasterio_raster_reproject(file_in, file_out, crs_out):
+    """wrapper around gdalwarp for reprojecting rasters
+    Parameters
+    ---------
+        file_in: string
+            file path of input raster
+        file_out: string
+            file path of output raster
+        crs_out: string
+            EPSG spatial reference for output raster coordinate system in
+                'EPSG:X' format
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    Requires rasterio
+        requires methods from rasterio.warp
+        import rasterio
+        from rasterio.warp import calculate_default_transform, reproject, Resampling
+    """
+
+    with rasterio.open(file_in) as src:
+        transform, width, height = calculate_default_transform(
+            src.crs, crs_out, src.width, src.height, *src.bounds)
+        kwargs = src.meta.copy()
+        kwargs.update({
+            'crs': crs_out,
+            'transform': transform,
+            'width': width,
+            'height': height
+        })
+
+        with rasterio.open(file_out, 'w', **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=crs_out,
+                    resampling=Resampling.nearest)
 
 def gdal_raster_merge(file_list_in, file_out):
     """wrapper around gdalwarp for merging rasters
