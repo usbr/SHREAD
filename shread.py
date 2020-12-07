@@ -624,17 +624,19 @@ def org_snodas(cfg, date_dn):
 
     # convert units
     if cfg.unit_sys == 'english':
-        calc_exp = '(+ 1 (* 39.3701 (read 1)))' # inches x 1000
+        calc_exp = '(+ 1 (* .0393701 (read 1)))' # inches
     if cfg.unit_sys == 'metric':
         calc_exp = '(read 1)' # keep units in mm
-
+    dtype_out = 'float64' # move to top of function
     # SWE
     tif_list = glob.glob("{0}/*{1}*{2}{3}*{4}*{5}.tif".format(dir_work_snodas, '1034', date_str, "05", proj_str, basin_str))
 
     for tif in tif_list:
+        tif_int = os.path.splitext(tif)[0] + "_" + dtype_out + ".tif"
         tif_out = cfg.dir_db + "snodas_swe_" + date_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
         try:
-            rio_calc(tif, tif_out, calc_exp)
+            rio_dtype_conversion(tif, tif_int, dtype_out)
+            rio_calc(tif_int, tif_out, calc_exp)
             logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
         except:
             logger.error("org_snodas: error calc {} to {}".format(tif, tif_out))
@@ -645,9 +647,11 @@ def org_snodas(cfg, date_dn):
     tif_list = glob.glob("{0}/*{1}*{2}{3}*{4}*{5}.tif".format(dir_work_snodas, '1036', date_str, "05", proj_str, basin_str))
 
     for tif in tif_list:
+        tif_int = os.path.splitext(tif)[0] + "_" + dtype_out + ".tif"
         tif_out = cfg.dir_db + "snodas_snowdepth_" + date_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
         try:
-            rio_calc(tif, tif_out, calc_exp)
+            rio_dtype_conversion(tif, tif_int, dtype_out)
+            rio_calc(tif_int, tif_out, calc_exp)
             logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
         except:
             logger.error("org_snodas: error calc {} to {}".format(tif, tif_out))
@@ -676,12 +680,6 @@ def org_snodas(cfg, date_dn):
         try:
             frames = [cfg.basin_poly, tif_stats_df]
             basin_poly_stats = pd.concat(frames, axis = 1)
-            # convert units from inches x 1000 to inches
-            if(cfg.unit_sys == 'english'):
-                basin_poly_stats.loc[:, 'min'] = basin_poly_stats.loc[:, 'min'].values / 100
-                basin_poly_stats.loc[:, 'max'] = basin_poly_stats.loc[:, 'max'].values / 100
-                basin_poly_stats.loc[:, 'mean'] = basin_poly_stats.loc[:, 'mean'].values / 100
-                basin_poly_stats.loc[:, 'median'] = basin_poly_stats.loc[:, 'median'].values / 100
             logger.info("org_snodas: merging zonal statistics")
         except:
             logger.error("org_snodas: error merging zonal statistics")
@@ -1238,6 +1236,27 @@ def rio_calc(rast_in, rast_out, calc_exp):
     Requires rasterio
     """
     os.system('rio calc "{0}" {1} {2}'.format(calc_exp, rast_in, rast_out))
+
+def rio_dtype_conversion(rast_in, rast_out, dtype_out):
+    """wrapper around rio calc from rasterio package for raster math
+    Parameters
+    ---------
+        rast_in: string
+            file path of input raster
+        rast_out: string
+            file path of output raster
+        dtype_out: string
+            data type
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    Requires rasterio
+    """
+    os.system('rio convert -t "{0}" {1} {2}'.format(dtype_out, rast_in, rast_out))
 
 def gdal_raster_clip(poly_in, rast_in, rast_out, crs_in, crs_out, nodata):
     """wrapper around gdalwarp for clipping rasters with polygon
