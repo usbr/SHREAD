@@ -462,7 +462,8 @@ def download_snodas(cfg, date_dn, overwrite_flag = False):
         None
 
     """
-
+    dtype_out = 'float64' # convert snodas raster from int16 to float64 to perform
+        # unit conversion. 
     site_url = cfg.host_snodas + cfg.dir_ftp_snodas
     zip_name = "SNODAS_" + ("{}.tar".format(date_dn.strftime('%Y%m%d')))
     zip_url = site_url + date_dn.strftime('%Y') + "/" + date_dn.strftime('%m') + "_" \
@@ -627,7 +628,6 @@ def org_snodas(cfg, date_dn):
         calc_exp = '(+ 1 (* .0393701 (read 1)))' # inches
     if cfg.unit_sys == 'metric':
         calc_exp = '(read 1)' # keep units in mm
-    dtype_out = 'float64' # move to top of function
     # SWE
     tif_list = glob.glob("{0}/*{1}*{2}{3}*{4}*{5}.tif".format(dir_work_snodas, '1034', date_str, "05", proj_str, basin_str))
 
