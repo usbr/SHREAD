@@ -283,14 +283,6 @@ class config_params:
                 logger.error("read_config: '{}' missing from [{}] section".format("gdal_path", wd_sec))
                 error_flag = True
 
-            #- python_path
-            try:
-                self.python_path = config.get(wd_sec, "python_path")
-                logger.info("read config: reading 'python_path' {}".format(self.gdal_path))
-            except:
-                logger.error("read_config: '{}' missing from [{}] section".format("python_path", wd_sec))
-                error_flag = True
-
             #- basin_poly_path
             try:
                 self.basin_poly_path = config.get(wd_sec, "basin_poly_path")
@@ -1191,29 +1183,29 @@ def gdal_raster_merge(file_list_in, file_out):
     cmd_string = " ".join(cmd_list)
     os.system(cmd_string)
 
-def gdal_calc(rast_in, rast_out, calc_exp):
-    """wrapper around gdal_calc for raster math
-    Parameters
-    ---------
-        rast_in: string
-            file path of input raster
-        rast_out: string
-            file path of output raster
-        calc_exp: string
-            raster math expression
-
-    Returns
-    -------
-        None
-
-    Notes
-    -----
-    Requires gdal_path be set in config ini file and gdal be available
-    Only set up to work with single raster
-
-    """
-    gdal_calc = os.path.join(cfg.gdal_path, 'gdal_calc.py')
-    os.system('{0} {1} -A {2} --outfile {3} --calc="{4}"'.format(cfg.python_path, gdal_calc, rast_in, rast_out, calc_exp))
+# def gdal_calc(rast_in, rast_out, calc_exp):
+#     """wrapper around gdal_calc for raster math
+#     Parameters
+#     ---------
+#         rast_in: string
+#             file path of input raster
+#         rast_out: string
+#             file path of output raster
+#         calc_exp: string
+#             raster math expression
+#
+#     Returns
+#     -------
+#         None
+#
+#     Notes
+#     -----
+#     Requires gdal_path be set in config ini file and gdal be available
+#     Only set up to work with single raster
+#
+#     """
+#     gdal_calc = os.path.join(cfg.gdal_path, 'gdal_calc.py')
+#     os.system('{0} {1} -A {2} --outfile {3} --calc="{4}"'.format(cfg.python_path, gdal_calc, rast_in, rast_out, calc_exp))
 
 def rio_calc(rast_in, rast_out, calc_exp):
     """wrapper around rio calc from rasterio package for raster math
