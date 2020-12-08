@@ -462,8 +462,6 @@ def download_snodas(cfg, date_dn, overwrite_flag = False):
         None
 
     """
-    dtype_out = 'float64' # convert snodas raster from int16 to float64 to perform
-        # unit conversion. 
     site_url = cfg.host_snodas + cfg.dir_ftp_snodas
     zip_name = "SNODAS_" + ("{}.tar".format(date_dn.strftime('%Y%m%d')))
     zip_url = site_url + date_dn.strftime('%Y') + "/" + date_dn.strftime('%m') + "_" \
@@ -486,7 +484,8 @@ def download_snodas(cfg, date_dn, overwrite_flag = False):
             logging.error(e)
 
 def org_snodas(cfg, date_dn):
-
+    dtype_out = 'float64' # convert snodas raster from int16 to float64 to perform
+        # unit conversion.
     dir_work_snodas = cfg.dir_work + 'snodas/'
     dir_arch_snodas = cfg.dir_arch + 'snodas/'
     date_str = str(date_dn.strftime('%Y%m%d'))
@@ -688,7 +687,7 @@ def org_snodas(cfg, date_dn):
             basin_poly_stats.to_file(geojson_out, driver = 'GeoJSON')
             logger.info("org_snodas: writing {0}".format(geojson_out))
         except:
-            logger.error("org_snodas: error writing {0}".format(csv_out))
+            logger.error("org_snodas: error writing {0}".format(geojson_out))
         try:
             csv_out = os.path.splitext(tif)[0] + ".csv"
             basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
