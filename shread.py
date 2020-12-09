@@ -361,14 +361,6 @@ class config_params:
                 logger.error("read_config: '{}' missing from [{}] section".format("dir_http_nsa", nohrsc_sec))
                 error_flag = True
 
-            #- srpt_flag
-            try:
-                self.srpt_flag = config.get(nohrsc_sec, "srpt_flag")
-                logger.info("read config: reading 'srpt_flag' {}".format(self.srpt_flag))
-            except:
-                logger.error("read_config: '{}' missing from [{}] section".format("srpt_flag", nohrsc_sec))
-                error_flag = True
-
         # modscag section
         logger.info("[modscag]")
         if error_modscag_sec_flag == False:
