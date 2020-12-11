@@ -376,3 +376,6 @@ data/working/aso/ASO_50M_SD_USCAJW_20190315.tif.xml
 data/working/aso/ASO_50M_SD_USCAJW_20180602.tif.xml
 data/working/aso/ASO_50M_SD_USCAJW_20180423.tif.xml
 data/working/aso/nsidc-download_ASO_50M_SWE.001_2020-12-08.py
+resources/ParamVarsNotes.txt
+testing/snow_download_by_tile.py
+testing/snow_download_by_tile_example_usage.txt

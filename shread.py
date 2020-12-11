@@ -106,6 +106,11 @@ def main(config_path, start_date, end_date, time_int, prod_str):
             download_srpt(cfg, date_dn)
             org_srpt(cfg, date_dn)
 
+    # modscag
+    if 'modscag' in prod_list :
+        for date_dn in date_list:
+            download_modscag(cfg, date_dn)
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description= ' SHREAD',
@@ -114,13 +119,13 @@ def parse_args():
         '-i', '--ini', metavar='PATH',
         type = lambda x: is_valid_file(parser, x), help='Input file')
     parser.add_argument(
-        '-s', '--start', metavar='start_date', help = 'start date')
+        '-s', '--start', metavar ='start_date', help = 'start date')
     parser.add_argument(
-        '-e', '--end', metavar='end_date', help = 'end date')
+        '-e', '--end', metavar ='end_date', help = 'end date')
     parser.add_argument(
-        '-t', '--time', metavar='time_interval', help = 'time interval')
+        '-t', '--time', metavar ='time_interval', help = 'time interval')
     parser.add_argument(
-        '-p', '--prod', metavar='product_list', help = 'product list')
+        '-p', '--prod', metavar ='product_list', help = 'product list')
     args = parser.parse_args()
     return args
 
@@ -283,20 +288,35 @@ class config_params:
                 logger.error("read_config: '{}' missing from [{}] section".format("gdal_path", wd_sec))
                 error_flag = True
 
-            #- python_path
-            try:
-                self.python_path = config.get(wd_sec, "python_path")
-                logger.info("read config: reading 'python_path' {}".format(self.gdal_path))
-            except:
-                logger.error("read_config: '{}' missing from [{}] section".format("python_path", wd_sec))
-                error_flag = True
-
             #- basin_poly_path
             try:
                 self.basin_poly_path = config.get(wd_sec, "basin_poly_path")
                 logger.info("read config: reading 'basin_poly_path' {}".format(self.basin_poly_path))
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("basin_poly_path", wd_sec))
+                error_flag = True
+
+            #- basin_points_path
+            try:
+                self.basin_points_path = config.get(wd_sec, "basin_points_path")
+                logger.info("read config: reading 'basin_points_path' {}".format(self.basin_points_path))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("basin_points_path", wd_sec))
+                error_flag = True
+
+            #- outut_type
+            try:
+                self.output_type = config.get(wd_sec, "output_type")
+                logger.info("read config: reading 'output_type' {}".format(self.output_type))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("output_type", wd_sec))
+
+            #- output_format
+            try:
+                self.output_format = config.get(wd_sec, "output_format")
+                logger.info("read config: reading 'output_format' {}".format(self.output_format))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("output_format", wd_sec))
                 error_flag = True
 
         # snodas section
@@ -439,6 +459,10 @@ class config_params:
         # open basin_poly
         self.basin_poly = gpd.read_file(self.basin_poly_path)
 
+        # open basin points
+        if 'points' in self.output_type:
+            self.basin_points = gpd.read_file(self.basin_points_path)
+
         # find bounding box for basin_poly
         self.basin_poly_bbox = self.basin_poly.total_bounds.tolist()
 
@@ -484,15 +508,25 @@ def download_snodas(cfg, date_dn, overwrite_flag = False):
             logging.error(e)
 
 def org_snodas(cfg, date_dn):
-    dtype_out = 'float64' # convert snodas raster from int16 to float64 to perform
-        # unit conversion.
+
     dir_work_snodas = cfg.dir_work + 'snodas/'
     dir_arch_snodas = cfg.dir_arch + 'snodas/'
     date_str = str(date_dn.strftime('%Y%m%d'))
     chr_rm = [":"]
     proj_str = ''.join(i for i in cfg.proj if not i in chr_rm)
     crs_raw = 'EPSG:4326'
+    dtype_out = 'float64' # convert snodas raster from int16 to float64 to perform
+        # unit conversion.
     basin_str = os.path.splitext(os.path.basename(cfg.basin_poly_path))[0]
+
+    # clean up working directory
+    for file in glob.glob("{0}/*.tif".format(dir_work_snodas)):
+        file_path = dir_work_snodas + file
+        try:
+            os.remove(file_path)
+            logger.info("org_snodas: removing {}".format(file_path))
+        except:
+            logger.error("org_snodas: error removing {}".format(file_path))
 
     # untar files
     zip_name = "SNODAS_" + ("{}.tar".format(date_dn.strftime('%Y%m%d')))
@@ -501,17 +535,17 @@ def org_snodas(cfg, date_dn):
 
     try:
         tar_con = tarfile.open(zip_path)
-        tar_con.extractall(path = dir_work_snodas)
+        tar_con.extractall(path=dir_work_snodas)
         tar_con.close()
-        logger.info("org_snodas: untaring {}".format(zip_path))
+        logger.info("org_snodas: untaring {0}".format(zip_path))
     except:
-        logger.error("download_snodas: error untaring {}".format(zip_path))
+        logger.error("download_snodas: error untaring {0}".format(zip_path))
     if cfg.arch_flag == True:
         os.rename(zip_path, zip_arch)
-        logger.info("org_snodas: archiving {} to {}".format(zip_path))
+        logger.info("org_snodas: archiving {0} to {1}".format(zip_path, zip_arch))
     else:
         os.remove(zip_path)
-        logger.info("org_snodas: removing {}".format(zip_path))
+        logger.info("org_snodas: removing {0}".format(zip_path))
 
     # ungz files
     for file_gz in os.listdir(dir_work_snodas):
@@ -670,31 +704,64 @@ def org_snodas(cfg, date_dn):
     tif_list = glob.glob("{0}/{1}*{2}*{3}*{4}.tif".format(cfg.dir_db, 'snodas', date_str, basin_str, cfg.unit_sys))
 
     for tif in tif_list:
-        try:
-            tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats = ['min', 'max', 'median', 'mean'])
-            tif_stats_df = pd.DataFrame(tif_stats)
-            logger.info("org_snodas: computing zonal statistics")
-        except:
-            logger.error("org_snodas: error computing zonal statistics")
-        try:
-            frames = [cfg.basin_poly, tif_stats_df]
-            basin_poly_stats = pd.concat(frames, axis = 1)
-            logger.info("org_snodas: merging zonal statistics")
-        except:
-            logger.error("org_snodas: error merging zonal statistics")
-        try:
-            geojson_out = os.path.splitext(tif)[0] + ".geojson"
-            basin_poly_stats.to_file(geojson_out, driver = 'GeoJSON')
-            logger.info("org_snodas: writing {0}".format(geojson_out))
-        except:
-            logger.error("org_snodas: error writing {0}".format(geojson_out))
-        try:
-            csv_out = os.path.splitext(tif)[0] + ".csv"
-            basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
-            basin_poly_stats_df.to_csv(csv_out)
-            logger.info("org_snodas: writing {0}".format(csv_out))
-        except:
-            logger.error("org_snodas: error writing {0}".format(csv_out))
+        if 'poly' in cfg.output_type:
+            try:
+                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['min', 'max', 'median', 'mean'])
+                tif_stats_df = pd.DataFrame(tif_stats)
+                logger.info("org_snodas: computing zonal statistics")
+            except:
+                logger.error("org_snodas: error computing poly zonal statistics")
+            try:
+                frames = [cfg.basin_poly, tif_stats_df]
+                basin_poly_stats = pd.concat(frames, axis=1)
+                logger.info("org_snodas: merging poly zonal statistics")
+            except:
+                logger.error("org_snodas: error merging zonal statistics")
+
+            if 'geojson' in cfg.output_format:
+                try:
+                    geojson_out = os.path.splitext(tif)[0] + "_poly.geojson"
+                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    logger.info("org_snodas: writing {0}".format(geojson_out))
+                except:
+                    logger.error("org_snodas: error writing {0}".format(geojson_out))
+            if 'csv' in cfg.output_format:
+                try:
+                    csv_out = os.path.splitext(tif)[0] + "_poly.csv"
+                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.to_csv(csv_out)
+                    logger.info("org_snodas: writing {0}".format(csv_out))
+                except:
+                    logger.error("org_snodas: error writing {0}".format(csv_out))
+
+        if 'points' in cfg.output_type:
+            try:
+                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['min', 'max', 'median', 'mean'])
+                tif_stats_df = pd.DataFrame(tif_stats)
+                logger.info("org_snodas: computing points zonal statistics")
+            except:
+                logger.error("org_snodas: error computing points zonal statistics")
+            try:
+                frames = [cfg.basin_points, tif_stats_df]
+                basin_poly_stats = pd.concat(frames, axis=1)
+                logger.info("org_snodas: merging zonal statistics")
+            except:
+                logger.error("org_snodas: error merging zonal statistics")
+            if 'geojson' in cfg.output_format:
+                try:
+                    geojson_out = os.path.splitext(tif)[0] + "_points.geojson"
+                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    logger.info("org_snodas: writing {0}".format(geojson_out))
+                except:
+                    logger.error("org_snodas: error writing {0}".format(geojson_out))
+            if 'csv' in cfg.output_format:
+                try:
+                    csv_out = os.path.splitext(tif)[0] + "_points.csv"
+                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.to_csv(csv_out)
+                    logger.info("org_snodas: writing {0}".format(csv_out))
+                except:
+                    logger.error("org_snodas: error writing {0}".format(csv_out))
 
     # clean up working directory
     for file in os.listdir(dir_work_snodas):
@@ -704,6 +771,7 @@ def org_snodas(cfg, date_dn):
             logger.info("org_snodas: removing {}".format(file_path))
         except:
             logger.error("org_snodas: error removing {}".format(file_path))
+
 
 def download_srpt(cfg, date_dn, overwrite_flag = False):
     """Download snow reports from nohrsc
@@ -1190,30 +1258,6 @@ def gdal_raster_merge(file_list_in, file_out):
     cmd_list = ["python", gdal_merge, "-o", file_out] + file_list_in
     cmd_string = " ".join(cmd_list)
     os.system(cmd_string)
-
-def gdal_calc(rast_in, rast_out, calc_exp):
-    """wrapper around gdal_calc for raster math
-    Parameters
-    ---------
-        rast_in: string
-            file path of input raster
-        rast_out: string
-            file path of output raster
-        calc_exp: string
-            raster math expression
-
-    Returns
-    -------
-        None
-
-    Notes
-    -----
-    Requires gdal_path be set in config ini file and gdal be available
-    Only set up to work with single raster
-
-    """
-    gdal_calc = os.path.join(cfg.gdal_path, 'gdal_calc.py')
-    os.system('{0} {1} -A {2} --outfile {3} --calc="{4}"'.format(cfg.python_path, gdal_calc, rast_in, rast_out, calc_exp))
 
 def rio_calc(rast_in, rast_out, calc_exp):
     """wrapper around rio calc from rasterio package for raster math
