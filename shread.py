@@ -1043,7 +1043,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
 
     """
 
-    site_url = cfg.host_modscag + cfg.dir_http_modscag + date_dn.strftime('%Y') + "/" + date_dn.strftime('%j')
+    site_url = cfg.host_jpl + cfg.dir_http_modscag + date_dn.strftime('%Y') + "/" + date_dn.strftime('%j')
     r = requests.get(site_url, auth=HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
     if r.status_code == 200:
         dir_work_d = cfg.dir_work + 'modscag/'
