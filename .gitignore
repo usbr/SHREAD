@@ -379,3 +379,12 @@ data/working/aso/nsidc-download_ASO_50M_SWE.001_2020-12-08.py
 resources/ParamVarsNotes.txt
 testing/snow_download_by_tile.py
 testing/snow_download_by_tile_example_usage.txt
+resources/cbrfc_points.csv
+resources/info/arc.dir
+ndfd.py
+resources/schema.ini
+resources/NOAA_zones_SanJuan.csv
+shread_app/data_archive.py
+testing/ds.mint.bin
+testing/ds.snow.bin
+testing/tile.html

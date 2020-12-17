@@ -37,6 +37,7 @@ from lxml import etree
 import fiona
 import rasterio
 from rasterio.warp import calculate_default_transform, reproject, Resampling
+from pyproj import Transformer
 
 def main(config_path, start_date, end_date, time_int, prod_str):
     """SHREAD main function
@@ -173,7 +174,7 @@ class config_params:
         error_wd_sec_flag = False
         error_snodas_sec_flag = False
         error_nohrsc_sec_flag = False
-        error_modscag_sec_flag = False
+        error_jpl_sec_flag = False
         error_modis_sec_flag = False
 
         try:
@@ -188,7 +189,7 @@ class config_params:
         wd_sec = "wd"
         snodas_sec = "snodas"
         nohrsc_sec = "nohrsc"
-        modscag_sec = "modscag"
+        jpl_sec = "jpl"
 
         # ADD SECTIONS AS NEW SNOW PRODUCTS ARE ADDED
 
@@ -213,11 +214,11 @@ class config_params:
             error_flag = True
             error_nohrsc_sec_flag = True
 
-        if modscag_sec not in cfg_secs:
+        if jpl_sec not in cfg_secs:
             logger.error(
-                    "read_config: config file missing [{}] section".format(modscag_sec))
+                    "read_config: config file missing [{}] section".format(jpl_sec))
             error_flag = True
-            error_modscag_sec_flag = True
+            error_jpl_sec_flag = True
 
         # read file
         # wd section
@@ -397,39 +398,47 @@ class config_params:
                 logger.error("read_config: '{}' missing from [{}] section".format("srpt_flag", nohrsc_sec))
                 error_flag = True
 
-        # modscag section
-        logger.info("[modscag]")
-        if error_modscag_sec_flag == False:
-            #- host_modscag
+        # jpl section
+        logger.info("[jpl]")
+        if error_jpl_sec_flag == False:
+            #- host_jpl
             try:
-                self.host_modscag = config.get(modscag_sec, "host_modscag")
-                logger.info("read config: reading 'host_modscag' {}".format(self.host_modscag))
+                self.host_jpl = config.get(jpl_sec, "host_jpl")
+                logger.info("read config: reading 'host_jpl' {}".format(self.host_jpl))
             except:
-                logger.error("read_config: '{}' missing from [{}] section".format("host_modscag", modscag_sec))
+                logger.error("read_config: '{}' missing from [{}] section".format("host_jpl", jpl_sec))
                 error_flag = True
 
-            #- username_modscag
+            #- username_jpl
             try:
-                self.username_modscag = config.get(modscag_sec, "username_modscag")
-                logger.info("read config: reading 'username_modscag' {}".format(self.username_modscag))
+                self.username_jpl = config.get(jpl_sec, "username_jpl")
+                logger.info("read config: reading 'username_jpl' {}".format(self.username_jpl))
             except:
-                logger.error("read_config: '{}' missing from [{}] section".format("username_modscag", modscag_sec))
+                logger.error("read_config: '{}' missing from [{}] section".format("username_jpl", jpl_sec))
                 error_flag = True
 
-            #- password_modscag
+            #- password_jpl
             try:
-                self.password_modscag = config.get(modscag_sec, "password_modscag")
-                logger.info("read config: reading 'password_modscag' {}".format(self.password_modscag))
+                self.password_jpl = config.get(jpl_sec, "password_jpl")
+                logger.info("read config: reading 'password_jpl' {}".format(self.password_jpl))
             except:
-                logger.error("read_config: '{}' missing from [{}] section".format("password_modscag", modscag_sec))
+                logger.error("read_config: '{}' missing from [{}] section".format("password_jpl", jpl_sec))
                 error_flag = True
 
             #- dir_http_modscag
             try:
-                self.dir_http_modscag = config.get(modscag_sec, "dir_http_modscag")
+                self.dir_http_modscag = config.get(jpl_sec, "dir_http_modscag")
                 logger.info("read config: reading 'dir_http_modscag' {}".format(self.dir_http_modscag))
             except:
-                logger.error("read_config: '{}' missing from [{}] section".format("dir_http_modscag", modscag_sec))
+                logger.error("read_config: '{}' missing from [{}] section".format("dir_http_modscag", jpl_sec))
+                error_flag = True
+
+            #- dir_http_moddrfs
+            try:
+                self.dir_http_moddrfs = config.get(jpl_sec, "dir_http_moddrfs")
+                logger.info("read config: reading 'dir_http_moddrfs' {}".format(self.dir_http_moddrfs))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("dir_http_moddrfs", jpl_sec))
                 error_flag = True
 
         if error_flag == True:
@@ -464,7 +473,16 @@ class config_params:
             self.basin_points = gpd.read_file(self.basin_points_path)
 
         # find bounding box for basin_poly
-        self.basin_poly_bbox = self.basin_poly.total_bounds.tolist()
+        self.basin_poly_bbox_raw = self.basin_poly.total_bounds.tolist()
+
+        # if basin poly is not in EPSG:4326'convert bounding box coordinates
+        if self.proj != 'EPSG:4326':
+            transformer = Transformer.from_crs(self.proj, 'EPSG:4326')
+            xmin,ymin = transformer.transform(self.basin_poly_bbox_raw[0], self.basin_poly_bbox_raw[1])
+            xmax,ymax = transformer.transform(self.basin_poly_bbox_raw[2], self.basin_poly_bbox_raw[3])
+            self.basin_poly_bbox = [xmin,ymin,xmax,ymax]
+        elif self.proj == 'EPSG:4326':
+            self.basin_poly_bbox = self.basin_poly_bbox_raw
 
         # find modis sinusodial grid tiles overlapping basin_poly
         self.singrd_tile_list = find_tiles(self.basin_poly_bbox)
@@ -1026,7 +1044,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
     """
 
     site_url = cfg.host_modscag + cfg.dir_http_modscag + date_dn.strftime('%Y') + "/" + date_dn.strftime('%j')
-    r = requests.get(site_url, auth=HTTPDigestAuth(cfg.username_modscag, cfg.password_modscag))
+    r = requests.get(site_url, auth=HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
     if r.status_code == 200:
         dir_work_d = cfg.dir_work + 'modscag/'
         if not os.path.isdir(dir_work_d):
@@ -1048,7 +1066,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
                 logger.info("download_modscag: downloading from {}".format(tif_fsca_url))
                 logger.info("download_modscag: downloading to {}".format(tif_fsca_path))
                 try:
-                    r = requests.get(tif_fsca_url, auth = HTTPDigestAuth(cfg.username_modscag, cfg.password_modscag))
+                    r = requests.get(tif_fsca_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
                     if r.status_code == 200:
                         with open(tif_fsca_path, 'wb') as rfile:
                             rfile.write(r.content)
@@ -1072,7 +1090,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
                     logger.info("download_modscag: downloading from {}".format(tif_vfrac_url))
                     logger.info("download_modscag: downloading to {}".format(tif_vfrac_path))
                     try:
-                        r = requests.get(tif_vfrac_url, auth = HTTPDigestAuth(cfg.username_modscag, cfg.password_modscag))
+                        r = requests.get(tif_vfrac_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
                         if r.status_code == 200:
                             with open(tif_vfrac_path, 'wb') as rfile:
                                 rfile.write(r.content)
@@ -2013,18 +2031,6 @@ tiles = [
     [17, 35, -999.0000, -999.0000, -99.0000, -99.0000]
 ]
 
-def bbox(coord_list):
-    """
-    requires geojson
-    """
-
-    box = []
-
-    for i in (0,1):
-        res = sorted(coord_list, key=lambda x:x[i])
-        box.append((res[0][i],res[-1][i]))
-    ret = [box[0][0], box[1][0], box[0][1], box[1][1]]
-    return ret
 
 def find_tiles(bbox):
     """uses tile list and bounding box to identify modis tiles
@@ -2058,11 +2064,11 @@ def find_tiles(bbox):
             polyr = ogr.Geometry(ogr.wkbPolygon)
             polyr.AddGeometry(tiler)
             bboxr = ogr.Geometry(ogr.wkbLinearRing)
-            bboxr.AddPoint(bbox[0], bbox[1])
-            bboxr.AddPoint(bbox[2], bbox[1])
-            bboxr.AddPoint(bbox[2], bbox[3])
-            bboxr.AddPoint(bbox[0], bbox[3])
-            bboxr.AddPoint(bbox[0], bbox[1])
+            bboxr.AddPoint(bbox[1], bbox[0])
+            bboxr.AddPoint(bbox[1], bbox[2])
+            bboxr.AddPoint(bbox[3], bbox[2])
+            bboxr.AddPoint(bbox[3], bbox[0])
+            bboxr.AddPoint(bbox[1], bbox[0])
             polyb = ogr.Geometry(ogr.wkbPolygon)
             polyb.AddGeometry(bboxr)
             return polyr.Intersects(polyb)
