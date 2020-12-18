@@ -1,3 +1,8 @@
+<div class="inline-block">
+ <img src="https://github.com/usbr/SHREAD/blob/master/resources/images/logo_shread.png" width="200" />
+ <img src="https://github.com/usbr/SHREAD/blob/master/resources/images/logo_shreadtools.png" width="200" />
+</div>
+
 # SHREAD Snow Data Product Aquisition and Processing Tool
 SHREAD, the Snow-Hydrology Repo for Evaluation, Analysis, and Decision-making, is a tool for downloading, processing, and archiving snow data products, nominally to allow them to better support water management decision making. The tool is still in development, but currently provides access to the following products -
   * NOHRSC SNODAS Snow Water Equivalent (SWE)
