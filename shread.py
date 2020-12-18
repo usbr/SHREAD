@@ -111,6 +111,7 @@ def main(config_path, start_date, end_date, time_int, prod_str):
     if 'modscag' in prod_list :
         for date_dn in date_list:
             download_modscag(cfg, date_dn)
+            org_modscag(cfg, date_dn)
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -747,7 +748,7 @@ def org_snodas(cfg, date_dn):
                 try:
                     csv_out = os.path.splitext(tif)[0] + "_poly.csv"
                     basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
-                    basin_poly_stats_df.to_csv(csv_out)
+                    basin_poly_stats_df.to_csv(csv_out, index=False)
                     logger.info("org_snodas: writing {0}".format(csv_out))
                 except:
                     logger.error("org_snodas: error writing {0}".format(csv_out))
@@ -777,7 +778,7 @@ def org_snodas(cfg, date_dn):
                     csv_out = os.path.splitext(tif)[0] + "_points.csv"
                     basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
                     basin_poly_stats_df.to_csv(csv_out)
-                    logger.info("org_snodas: writing {0}".format(csv_out))
+                    logger.info("org_snodas: writing {0}".format(csv_out, index=False))
                 except:
                     logger.error("org_snodas: error writing {0}".format(csv_out))
 
@@ -961,7 +962,7 @@ def org_srpt(cfg, date_dn):
     srpt_gpd_clip.to_file(geojson_out, driver = 'GeoJSON')
     csv_out = cfg.dir_db + 'snow_reporters_' + date_dn.strftime('%Y%m%d') + '_' + basin_str + '.csv'
     srpt_gpd_clip_df = pd.DataFrame(srpt_gpd_clip.drop(columns = 'geometry'))
-    srpt_gpd_clip_df.to_csv(csv_out)
+    srpt_gpd_clip_df.to_csv(csv_out, index=False)
 
     # clean up working directory
     for file in os.listdir(dir_work_srpt):
@@ -1041,6 +1042,9 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
     -----
     Currently uses JPL data archive. May be moved in future.
 
+    geotif specs - # work on this
+        235 - cloud cover, guess
+        250 - nodata, guess
     """
 
     site_url = cfg.host_jpl + cfg.dir_http_modscag + date_dn.strftime('%Y') + "/" + date_dn.strftime('%j')
@@ -1132,47 +1136,194 @@ def org_modscag(cfg, date_dn):
 
     # merge and reproject snow fraction (fsca) files
     tif_list_fsca = glob.glob("{0}/*{1}*{2}.tif".format(dir_work_modscag, date_dn.strftime('%Y%j'), "snow_fraction"))
-    tif_out_fsca = 'data\working\modscag\MOD09GA.' + date_str + '.{0}_fsca.tif'
+    tif_out_fsca = 'data\working\modscag\MOD09GA_' + date_str + '_{0}_fsca.tif'
 
     try:
-        gdal_raster_merge(tif_list_fsca, tif_out_fsca.format("ext"))
+        rasterio_raster_merge(tif_list_fsca, tif_out_fsca.format("ext"))
         logger.info("org_modscag: merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'snow_fraction'))
     except:
         logger.error("org_modscag: error merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'snow_fraction'))
     try:
-        gdal_raster_reproject(tif_out_fsca.format("ext"), tif_out_fsca.format(proj_str), cfg.proj)
-        # rasterio_raster_reproject(tif_out_fsca.format("ext"), tif_out_fsca.format(proj_str), cfg.proj)
+        rasterio_raster_reproject(tif_out_fsca.format("ext"), tif_out_fsca.format(proj_str), cfg.proj, nodata=250)
         logger.info("org_modscag: reprojecting {} to {}".format('snow_fraction', date_dn.strftime('%Y-%m-%d')))
     except:
         logger.error("org_modscag: error reprojecting {} to {}".format(tif_out_fsca.format("ext"), tif_out_fsca.format(proj_str), cfg.proj))
 
     # merge and reproject vegetation fraction files (vfrac)
-    tif_list_vfrac = glob.glob("{0}/*{1}*{2}.tif".format(dir_work_modscag, date_dn.strftime('%Y%j'), "snow_fraction"))
-    tif_out_vfrac = 'data\working\modscag\MOD09GA.' + date_str + '.{0}_vfrac.tif'
+    tif_list_vfrac = glob.glob("{0}/*{1}*{2}.tif".format(dir_work_modscag, date_dn.strftime('%Y%j'), "vegetation_fraction"))
+    tif_out_vfrac = 'data\working\modscag\MOD09GA_' + date_str + '_{0}_vfrac.tif'
 
     try:
-        gdal_raster_merge(tif_list_vfrac, tif_out_vfrac.format("ext"))
+        rasterio_raster_merge(tif_list_vfrac, tif_out_vfrac.format("ext"))
         logger.info("org_modscag: merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'vegetation_fraction'))
     except:
         logger.error("org_modscag: error merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'vegetation_fraction'))
     try:
-        gdal_raster_reproject(tif_out_vfrac.format("ext"), tif_out_vfrac.format(proj_str), cfg.proj)
-        # rasterio_raster_reproject(tif_out_vfrac.format("ext"), tif_out_vfrac.format(proj_str), cfg.proj)
+        rasterio_raster_reproject(tif_out_vfrac.format("ext"), tif_out_vfrac.format(proj_str), cfg.proj, nodata=250)
         logger.info("org_modscag: reprojecting {} to {}".format('vegetation_fraction', date_dn.strftime('%Y-%m-%d')))
     except:
         logger.error("org_modscag: error reprojecting {} to {}".format(tif_out_vfrac.format("ext"), tif_out_vfrac.format(proj_str), cfg.proj))
 
-    # clip to basin polygon
-    tif_list = glob.glob("{0}/*{1}*{2}*.tif".format(dir_work_modscag, date_str, proj_str))
+    # clip to basin polygon (fsca)
+    tif_list = glob.glob("{0}/*{1}*{2}*{3}.tif".format(dir_work_modscag, date_str, proj_str, "fsca"))
     for tif in tif_list:
-        tif_out = os.path.splitext(tif)[0] + "_" + basin_str + ".tif"
+        tif_out = dir_work_modscag + "modscag_fsca_" + date_str + "_" + basin_str + ".tif"
         try:
-            gdal_raster_clip(cfg.basin_poly_path, tif, tif_out)
+            gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, cfg.proj, cfg.proj, 250)
             logger.info("org_modscag: clipping {} to {}".format(tif, tif_out))
         except:
             logger.error("org_modscag: error clipping {} to {}".format(tif, tif_out))
     if not tif_list:
         logger.error("org_modscag: error finding tifs to clip")
+
+    # clip to basin polygon (vfrac)
+    tif_list = glob.glob("{0}/*{1}*{2}*{3}.tif".format(dir_work_modscag, date_str, proj_str, "vfrac"))
+    for tif in tif_list:
+        tif_out = dir_work_modscag + "modscag_vfrac_" + date_str + "_" + basin_str + ".tif"
+        try:
+            gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, cfg.proj, cfg.proj, 250)
+            logger.info("org_modscag: clipping {} to {}".format(tif, tif_out))
+        except:
+            logger.error("org_modscag: error clipping {} to {}".format(tif, tif_out))
+    if not tif_list:
+        logger.error("org_modscag: error finding tifs to clip")
+
+    # set filenames
+    file_fsca = "modscag_fsca_" + date_str + "_" + basin_str + ".tif"
+    file_vfrac = "modscag_vfrac_" + date_str + "_" + basin_str + ".tif"
+    file_fscavegcor = "modscag_fscavegcor_" + date_str + "_" + basin_str + ".tif"
+
+    # open connection to rasters
+    rast_fsca = rasterio.open(dir_work_modscag + file_fsca)
+    rast_vfrac = rasterio.open(dir_work_modscag + file_vfrac)
+
+    # read in raster data to np array
+    fsca = rast_fsca.read(1)
+
+    # set pixels > 100 to nodata value (250)
+    fsca_masked = np.where(fsca>100, 250, fsca)
+
+    # read in raster data to np array
+    vfrac = rast_vfrac.read(1)
+
+    # set pixels > 100 to nodata value (250)
+    vfrac_masked = np.where(vfrac>100, 250, vfrac)
+
+    # write out masked files (fsca)
+    with rasterio.Env():
+
+        # Write an array as a raster band to a new 8-bit file. For
+        # the new file's profile, we start with the profile of the source
+        profile = rast_fsca.profile
+        profile.update(
+            dtype=rasterio.uint8,
+            count=1)
+        with rasterio.open(cfg.dir_db + file_fsca, 'w', **profile) as dst:
+            dst.write(fsca_masked,indexes=1)
+
+    # write out masked files (vfrac)
+    with rasterio.Env():
+
+        # Write an array as a raster band to a new 8-bit file. For
+        # the new file's profile, we start with the profile of the source
+        profile = rast_vfrac.profile
+        profile.update(
+            dtype=rasterio.uint8,
+            count=1)
+        with rasterio.open(cfg.dir_db + file_vfrac, 'w', **profile) as dst:
+            dst.write(vfrac_masked,indexes=1)
+
+    # fsca with vegetation correction
+    vfrac_calc = np.where(vfrac_masked==100, 99, vfrac_masked)
+    fsca_vegcor = fsca / (100 - vfrac_calc) * 100
+    fsca_vegcor_masked = np.where(fsca>100, 250, fsca_vegcor)
+
+    # write fsca with vegetation correction
+    with rasterio.Env():
+
+        # Write an array as a raster band to a new 8-bit file. For
+        # the new file's profile, we start with the profile of the source
+        profile = rast_vfrac.profile
+        profile.update(
+            dtype=rasterio.float64,
+            count=1)
+        with rasterio.open(cfg.dir_db + file_fscavegcor, 'w', **profile) as dst:
+            dst.write(fsca_vegcor_masked,indexes=1)
+
+    # close datasets
+    rast_fsca.close()
+    rast_vfrac.close()
+
+    # calculate zonal statistics and export data
+    tif_list = glob.glob("{0}/{1}*{2}*{3}*.tif".format(cfg.dir_db, 'modscag', date_str, basin_str))
+    for tif in tif_list:
+        if 'poly' in cfg.output_type:
+            try:
+                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['median', 'mean'])
+                tif_stats_df = pd.DataFrame(tif_stats)
+                logger.info("org_modscag: computing zonal statistics")
+            except:
+                logger.error("org_modscag: error computing poly zonal statistics")
+            try:
+                frames = [cfg.basin_poly, tif_stats_df]
+                basin_poly_stats = pd.concat(frames, axis=1)
+                logger.info("org_modscag: merging poly zonal statistics")
+            except:
+                logger.error("org_modscag: error merging zonal statistics")
+
+            if 'geojson' in cfg.output_format:
+                try:
+                    geojson_out = os.path.splitext(tif)[0] + "_poly.geojson"
+                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    logger.info("org_modscag: writing {0}".format(geojson_out))
+                except:
+                    logger.error("org_modscag: error writing {0}".format(geojson_out))
+            if 'csv' in cfg.output_format:
+                try:
+                    csv_out = os.path.splitext(tif)[0] + "_poly.csv"
+                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.to_csv(csv_out, index=False)
+                    logger.info("org_modscag: writing {0}".format(csv_out))
+                except:
+                    logger.error("org_modscag: error writing {0}".format(csv_out))
+
+        if 'points' in cfg.output_type:
+            try:
+                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['median', 'mean'])
+                tif_stats_df = pd.DataFrame(tif_stats)
+                logger.info("org_modscag: computing points zonal statistics")
+            except:
+                logger.error("org_modscag: error computing points zonal statistics")
+            try:
+                frames = [cfg.basin_points, tif_stats_df]
+                basin_poly_stats = pd.concat(frames, axis=1)
+                logger.info("org_modscag: merging zonal statistics")
+            except:
+                logger.error("org_modscag: error merging zonal statistics")
+            if 'geojson' in cfg.output_format:
+                try:
+                    geojson_out = os.path.splitext(tif)[0] + "_points.geojson"
+                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    logger.info("org_snodas: writing {0}".format(geojson_out))
+                except:
+                    logger.error("org_snodas: error writing {0}".format(geojson_out))
+            if 'csv' in cfg.output_format:
+                try:
+                    csv_out = os.path.splitext(tif)[0] + "_points.csv"
+                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.to_csv(csv_out, index=False)
+                    logger.info("org_modscag: writing {0}".format(csv_out))
+                except:
+                    logger.error("org_modscag: error writing {0}".format(csv_out))
+
+    # clean up working directory
+    for file in os.listdir(dir_work_modscag):
+        file_path = dir_work_modscag + file
+        try:
+            os.remove(file_path)
+            logger.info("org_modscag: removing {}".format(file_path))
+        except:
+            logger.error("org_modscag: error removing {}".format(file_path))
 
 
 def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
@@ -1206,8 +1357,8 @@ def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
         os.system("gdalwarp -t_srs {0} {1} {2}".format(crs_out, file_in, file_out))
     # error handling
 
-def rasterio_raster_reproject(file_in, file_out, crs_out):
-    """wrapper around gdalwarp for reprojecting rasters
+def rasterio_raster_reproject(file_in, file_out, crs_out, nodata = None):
+    """wrapper around rasterio for reprojecting rasters
     Parameters
     ---------
         file_in: string
@@ -1229,28 +1380,51 @@ def rasterio_raster_reproject(file_in, file_out, crs_out):
         import rasterio
         from rasterio.warp import calculate_default_transform, reproject, Resampling
     """
+    if nodata != None:
+        with rasterio.open(file_in) as src:
+            transform, width, height = calculate_default_transform(
+                src.crs, crs_out, src.width, src.height, *src.bounds)
+            kwargs = src.meta.copy()
+            kwargs.update({
+                'crs': crs_out,
+                'transform': transform,
+                'width': width,
+                'height': height
+            })
 
-    with rasterio.open(file_in) as src:
-        transform, width, height = calculate_default_transform(
-            src.crs, crs_out, src.width, src.height, *src.bounds)
-        kwargs = src.meta.copy()
-        kwargs.update({
-            'crs': crs_out,
-            'transform': transform,
-            'width': width,
-            'height': height
-        })
+            with rasterio.open(file_out, 'w', **kwargs) as dst:
+                for i in range(1, src.count + 1):
+                    reproject(
+                        source=rasterio.band(src, i),
+                        destination=rasterio.band(dst, i),
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=transform,
+                        dst_crs=crs_out,
+                        dst_nodata=nodata,
+                        resampling=Resampling.nearest)
+    elif nodata == None:
+            with rasterio.open(file_in) as src:
+                transform, width, height = calculate_default_transform(
+                    src.crs, crs_out, src.width, src.height, *src.bounds)
+                kwargs = src.meta.copy()
+                kwargs.update({
+                    'crs': crs_out,
+                    'transform': transform,
+                    'width': width,
+                    'height': height
+                })
 
-        with rasterio.open(file_out, 'w', **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=crs_out,
-                    resampling=Resampling.nearest)
+                with rasterio.open(file_out, 'w', **kwargs) as dst:
+                    for i in range(1, src.count + 1):
+                        reproject(
+                            source=rasterio.band(src, i),
+                            destination=rasterio.band(dst, i),
+                            src_transform=src.transform,
+                            src_crs=src.crs,
+                            dst_transform=transform,
+                            dst_crs=crs_out,
+                            resampling=Resampling.nearest)
 
 def gdal_raster_merge(file_list_in, file_out):
     """wrapper around gdalwarp for merging rasters
@@ -1276,6 +1450,42 @@ def gdal_raster_merge(file_list_in, file_out):
     cmd_list = ["python", gdal_merge, "-o", file_out] + file_list_in
     cmd_string = " ".join(cmd_list)
     os.system(cmd_string)
+
+def rasterio_raster_merge(file_list_in, file_out):
+    """wrapper around rasterio for merging rasters
+    Parameters
+    ---------
+        file_in_list: array
+            array of file paths of input raster
+        file_out: string
+            file path of output raster
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    requires rasterio library
+    only works with 1 band rasters
+    """
+
+    from rasterio.merge import merge
+
+    rast_mg = merge(file_list_in)
+    rast_con = rasterio.open(file_list_in[1])
+
+    with rasterio.open(
+        file_out,
+        'w',
+        driver='GTiff',
+        height=rast_mg[0].shape[1],
+        width=rast_mg[0].shape[2],
+        count=1,
+        dtype=rast_mg[0].dtype,
+        crs=rast_con.crs,
+        transform=rast_mg[1]) as dst:
+            dst.write(rast_mg[0][0,], 1)
 
 def rio_calc(rast_in, rast_out, calc_exp):
     """wrapper around rio calc from rasterio package for raster math
