@@ -107,11 +107,12 @@ def main(config_path, start_date, end_date, time_int, prod_str):
             download_srpt(cfg, date_dn)
             org_srpt(cfg, date_dn)
 
-    # modscag
-    if 'modscag' in prod_list :
+    # moddrfs
+    if 'moddrfs' in prod_list :
         for date_dn in date_list:
-            download_modscag(cfg, date_dn)
-            org_modscag(cfg, date_dn)
+            download_moddrfs(cfg, date_dn)
+            org_moddrfs(cfg, date_dn)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -1056,6 +1057,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
 
         # loop through modis sinusodial tiles
         for tile in cfg.singrd_tile_list:
+
             # snow fraction (fsca)
             tif_fsca_name = "MOD09GA.A" + date_dn.strftime('%Y') + date_dn.strftime('%j') + "." + tile + ".006.NRT.snow_fraction.tif"
             tif_fsca_url = site_url + "/" + tif_fsca_name
@@ -1324,6 +1326,296 @@ def org_modscag(cfg, date_dn):
             logger.info("org_modscag: removing {}".format(file_path))
         except:
             logger.error("org_modscag: error removing {}".format(file_path))
+
+
+def download_moddrfs(cfg, date_dn, overwrite_flag = False):
+    """Download moddrfs from JPL
+
+    Parameters
+    ---------
+        cfg ():
+            config_params Class object
+        date_dn: datetime
+            date
+        overwrite_flag: boolean
+            True : overwrite existing files
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    Currently uses JPL data archive. May be moved in future.
+
+    geotif specs - # work on this
+        2350 - cloud cover, guess
+        2500 - nodata, guess
+
+    *.deltavis product also available - unsure what this is
+    """
+
+    site_url = cfg.host_jpl + cfg.dir_http_moddrfs + date_dn.strftime('%Y') + "/" + date_dn.strftime('%j')
+    r = requests.get(site_url, auth=HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
+    if r.status_code == 200:
+        dir_work_d = cfg.dir_work + 'moddrfs/'
+        if not os.path.isdir(dir_work_d):
+            os.makedirs(dir_work_d)
+
+        # loop through modis sinusodial tiles
+        for tile in cfg.singrd_tile_list:
+
+            # forcing (forc)
+            tif_forc_name = "MOD09GA.A" + date_dn.strftime('%Y') + date_dn.strftime('%j') + "." + tile + ".006.NRT.forcing.tif"
+            tif_forc_url = site_url + "/" + tif_forc_name
+            tif_forc_path = dir_work_d + tif_forc_name
+
+            if os.path.isfile(tif_forc_path) and overwrite_flag:
+                os.remove(tif_forc_path)
+            if os.path.isfile(tif_forc_path) and overwrite_flag == False:
+                logger.info("download_moddrfs: skipping {} {}, {} exists".format(date_dn.strftime('%Y-%m-%d'), tile, tif_forc_path))
+            if not os.path.isfile(tif_forc_path):
+                logger.info("download_moddrfs: downloading {} {} {}".format('forcing', date_dn.strftime('%Y-%m-%d'), tile))
+                logger.info("download_moddrfs: downloading from {}".format(tif_forc_url))
+                logger.info("download_moddrfs: downloading to {}".format(tif_forc_path))
+                try:
+                    r = requests.get(tif_forc_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
+                    if r.status_code == 200:
+                        with open(tif_forc_path, 'wb') as rfile:
+                            rfile.write(r.content)
+                    else:
+                        logger.error("download_moddrfs: error downloading {} {} {}".format('forcing', date_dn.strftime('%Y-%m-%d'), tile))
+                except IOError as e:
+                    logger.error("download_moddrfs: error downloading {} {} {}".format(date_dn.strftime('forcing', '%Y-%m-%d'), tile))
+                    logging.error(e)
+
+                # grain size (grnsz)
+                tif_grnsz_name = "MOD09GA.A" + date_dn.strftime('%Y') + date_dn.strftime('%j') + "." + tile + ".006.NRT.drfs.grnsz.tif"
+                tif_grnsz_url = site_url + "/" + tif_grnsz_name
+                tif_grnsz_path = dir_work_d + tif_grnsz_name
+
+                if os.path.isfile(tif_grnsz_path) and overwrite_flag:
+                    os.remove(tif_grnsz_path)
+                if os.path.isfile(tif_grnsz_path) and overwrite_flag == False:
+                    logger.info("download_moddrfs: skipping {} {}, {} exists".format(date_dn.strftime('%Y-%m-%d'), tile, tif_grnsz_path))
+                if not os.path.isfile(tif_grnsz_path):
+                    logger.info("download_moddrfs: downloading {} {} {}".format('drfs.grnsz', date_dn.strftime('%Y-%m-%d'), tile))
+                    logger.info("download_moddrfs: downloading from {}".format(tif_grnsz_url))
+                    logger.info("download_moddrfs: downloading to {}".format(tif_grnsz_path))
+                    try:
+                        r = requests.get(tif_grnsz_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
+                        if r.status_code == 200:
+                            with open(tif_grnsz_path, 'wb') as rfile:
+                                rfile.write(r.content)
+                        else:
+                            logger.error("download_moddrfs: error downloading {} {} {}".format('drfs.grnsz', date_dn.strftime('%Y-%m-%d'), tile))
+                    except IOError as e:
+                        logger.error("download_moddrfs: error downloading {} {} {}".format(date_dn.strftime('drfs.grnsz', '%Y-%m-%d'), tile))
+                        logging.error(e)
+    else:
+        logger.error("download_moddrfs: error connecting {}".format(site_url))
+
+
+def org_moddrfs(cfg, date_dn):
+    """ Organize downloaded moddrfs data
+
+    Parameters
+    ---------
+        cfg ():
+            config_params Class object
+        date_dn: datetime
+            date
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+
+
+    """
+
+    # Proj4js.defs["SR-ORG:6974"] = "+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs";
+    dir_work_moddrfs = cfg.dir_work + 'moddrfs/'
+    dir_arch_moddrfs = cfg.dir_arch + 'moddrfs/'
+    date_str = str(date_dn.strftime('%Y%m%d'))
+    chr_rm = [":"]
+    proj_str = ''.join(i for i in cfg.proj if not i in chr_rm)
+    basin_str = os.path.splitext(os.path.basename(cfg.basin_poly_path))[0]
+
+    # merge and reproject radiative forcing (forc) files
+    tif_list_forc = glob.glob("{0}/*{1}*{2}.tif".format(dir_work_moddrfs, date_dn.strftime('%Y%j'), "forcing"))
+    tif_out_forc = 'data\working\moddrfs\MOD09GA_' + date_str + '_{0}_forc.tif'
+
+    try:
+        rasterio_raster_merge(tif_list_forc, tif_out_forc.format("ext"))
+        logger.info("org_moddrfs: merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'forcing'))
+    except:
+        logger.error("org_moddrfs: error merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'forcing'))
+    try:
+        rasterio_raster_reproject(tif_out_forc.format("ext"), tif_out_forc.format(proj_str), cfg.proj, nodata=2500)
+        logger.info("org_moddrfs: reprojecting {} to {}".format('forcing', date_dn.strftime('%Y-%m-%d')))
+    except:
+        logger.error("org_moddrfs: error reprojecting {} to {}".format(tif_out_forc.format("ext"), tif_out_forc.format(proj_str), cfg.proj))
+
+    # merge and reproject grain size files (grnsz)
+    tif_list_grnsz = glob.glob("{0}/*{1}*{2}.tif".format(dir_work_moddrfs, date_dn.strftime('%Y%j'), "drfs.grnsz"))
+    tif_out_grnsz = 'data\working\moddrfs\MOD09GA_' + date_str + '_{0}_grnsz.tif'
+
+    try:
+        rasterio_raster_merge(tif_list_grnsz, tif_out_grnsz.format("ext"))
+        logger.info("org_moddrfs: merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'drfs.grnsz'))
+    except:
+        logger.error("org_moddrfs: error merging {} {} tiles".format(date_dn.strftime('%Y-%m-%d'), 'drfs.grnsz'))
+    try:
+        rasterio_raster_reproject(tif_out_grnsz.format("ext"), tif_out_grnsz.format(proj_str), cfg.proj, nodata=2500)
+        logger.info("org_moddrfs: reprojecting {} to {}".format('drfs.grnsz', date_dn.strftime('%Y-%m-%d')))
+    except:
+        logger.error("org_moddrfs: error reprojecting {} to {}".format(tif_out_grnsz.format("ext"), tif_out_grnsz.format(proj_str), cfg.proj))
+
+    # clip to basin polygon (forc)
+    tif_list = glob.glob("{0}/*{1}*{2}*{3}.tif".format(dir_work_moddrfs, date_str, proj_str, "forc"))
+    for tif in tif_list:
+        tif_out = dir_work_moddrfs + "moddrfs_forc_" + date_str + "_" + basin_str + ".tif"
+        try:
+            gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, cfg.proj, cfg.proj, 2500)
+            logger.info("org_moddrfs: clipping {} to {}".format(tif, tif_out))
+        except:
+            logger.error("org_moddrfs: error clipping {} to {}".format(tif, tif_out))
+    if not tif_list:
+        logger.error("org_moddrfs: error finding tifs to clip")
+
+    # clip to basin polygon (grnsz)
+    tif_list = glob.glob("{0}/*{1}*{2}*{3}.tif".format(dir_work_moddrfs, date_str, proj_str, "grnsz"))
+    for tif in tif_list:
+        tif_out = dir_work_moddrfs + "moddrfs_grnsz_" + date_str + "_" + basin_str + ".tif"
+        try:
+            gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, cfg.proj, cfg.proj, 2500)
+            logger.info("org_moddrfs: clipping {} to {}".format(tif, tif_out))
+        except:
+            logger.error("org_moddrfs: error clipping {} to {}".format(tif, tif_out))
+    if not tif_list:
+        logger.error("org_moddrfs: error finding tifs to clip")
+
+    # set filenames
+    file_forc = "moddrfs_forc_" + date_str + "_" + basin_str + ".tif"
+    file_grnsz = "moddrfs_grnsz_" + date_str + "_" + basin_str + ".tif"
+
+    # open connection to rasters
+    rast_forc = rasterio.open(dir_work_moddrfs + file_forc)
+    rast_grnsz = rasterio.open(dir_work_moddrfs + file_grnsz)
+
+    # read in raster data to np array
+    forc = rast_forc.read(1)
+
+    # set pixels > 100 to nodata value (250)
+    forc_masked = np.where(forc>1000, 2500, forc)
+
+    # read in raster data to np array
+    grnsz = rast_grnsz.read(1)
+
+    # set pixels > 100 to nodata value (250)
+    grnsz_masked = np.where(grnsz>1000, 2500, grnsz)
+
+    # write out masked files (forc)
+    with rasterio.Env():
+
+        # Write an array as a raster band to a new 8-bit file. For
+        # the new file's profile, we start with the profile of the source
+        profile = rast_forc.profile
+        profile.update(
+            dtype=rasterio.uint16,
+            count=1)
+        with rasterio.open(cfg.dir_db + file_forc, 'w', **profile) as dst:
+            dst.write(forc_masked,indexes=1)
+
+    # write out masked files (grnsz)
+    with rasterio.Env():
+
+        # Write an array as a raster band to a new 8-bit file. For
+        # the new file's profile, we start with the profile of the source
+        profile = rast_grnsz.profile
+        profile.update(
+            dtype=rasterio.uint16,
+            count=1)
+        with rasterio.open(cfg.dir_db + file_grnsz, 'w', **profile) as dst:
+            dst.write(grnsz_masked,indexes=1)
+
+    # close datasets
+    rast_forc.close()
+    rast_grnsz.close()
+
+    # calculate zonal statistics and export data
+    tif_list = glob.glob("{0}/{1}*{2}*{3}*.tif".format(cfg.dir_db, 'moddrfs', date_str, basin_str))
+    for tif in tif_list:
+        if 'poly' in cfg.output_type:
+            try:
+                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['median', 'mean'])
+                tif_stats_df = pd.DataFrame(tif_stats)
+                logger.info("org_moddrfs: computing zonal statistics")
+            except:
+                logger.error("org_moddrfs: error computing poly zonal statistics")
+            try:
+                frames = [cfg.basin_poly, tif_stats_df]
+                basin_poly_stats = pd.concat(frames, axis=1)
+                logger.info("org_moddrfs: merging poly zonal statistics")
+            except:
+                logger.error("org_moddrfs: error merging zonal statistics")
+
+            if 'geojson' in cfg.output_format:
+                try:
+                    geojson_out = os.path.splitext(tif)[0] + "_poly.geojson"
+                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    logger.info("org_moddrfs: writing {0}".format(geojson_out))
+                except:
+                    logger.error("org_moddrfs: error writing {0}".format(geojson_out))
+            if 'csv' in cfg.output_format:
+                try:
+                    csv_out = os.path.splitext(tif)[0] + "_poly.csv"
+                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.to_csv(csv_out, index=False)
+                    logger.info("org_moddrfs: writing {0}".format(csv_out))
+                except:
+                    logger.error("org_moddrfs: error writing {0}".format(csv_out))
+
+        if 'points' in cfg.output_type:
+            try:
+                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['median', 'mean'])
+                tif_stats_df = pd.DataFrame(tif_stats)
+                logger.info("org_moddrfs: computing points zonal statistics")
+            except:
+                logger.error("org_moddrfs: error computing points zonal statistics")
+            try:
+                frames = [cfg.basin_points, tif_stats_df]
+                basin_poly_stats = pd.concat(frames, axis=1)
+                logger.info("org_moddrfs: merging zonal statistics")
+            except:
+                logger.error("org_moddrfs: error merging zonal statistics")
+            if 'geojson' in cfg.output_format:
+                try:
+                    geojson_out = os.path.splitext(tif)[0] + "_points.geojson"
+                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    logger.info("org_snodas: writing {0}".format(geojson_out))
+                except:
+                    logger.error("org_snodas: error writing {0}".format(geojson_out))
+            if 'csv' in cfg.output_format:
+                try:
+                    csv_out = os.path.splitext(tif)[0] + "_points.csv"
+                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.to_csv(csv_out, index=False)
+                    logger.info("org_moddrfs: writing {0}".format(csv_out))
+                except:
+                    logger.error("org_moddrfs: error writing {0}".format(csv_out))
+
+    # clean up working directory
+    for file in os.listdir(dir_work_moddrfs):
+        file_path = dir_work_moddrfs + file
+        try:
+            os.remove(file_path)
+            logger.info("org_moddrfs: removing {}".format(file_path))
+        except:
+            logger.error("org_moddrfs: error removing {}".format(file_path))
 
 
 def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
