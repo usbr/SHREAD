@@ -1,6 +1,6 @@
 <div class="inline-block">
- <img src="https://github.com/usbr/SHREAD/blob/master/resources/images/logo_shread.png" width="200" />
- <img src="https://github.com/usbr/SHREAD/blob/master/resources/images/logo_shreadtools.png" width="200" />
+ <img src="https://github.com/usbr/SHREAD/blob/master/resources/images/logo_shread.png" width="20%" />
+ <img src="https://github.com/usbr/SHREAD/blob/master/resources/images/logo_shreadtools.png" width="31%" />
 </div>
 
 # SHREAD Snow Data Product Aquisition and Processing Tool
