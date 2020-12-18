@@ -147,7 +147,7 @@ data/database/*
 data/working/snodas/*
 data/working/modscag/*
 .idea*
-config/shread_config_example.ini
+config/shread_config_testing.ini
 data/database/snodas_snowdepth_20190410_Bighorn_HUC8_EPSG5070_english_.csv
 data/database/snodas_swe_20190410_Bighorn_HUC8_EPSG5070_english_.csv
 data/working/srpt/snow_reporters_20190401_flattened.kml
