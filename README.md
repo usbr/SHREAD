@@ -14,7 +14,7 @@ Support for additional products is in development or planned, including -
   * NOHRSC National Snow Analysis Snowfall Depth
 
 ## Requirements
-* Python 3.X
+* Python 3.X (currently tested using Python 3.8)
 * Libraries listed in the *environment.yml* file
 
 <sup>a</sup> SHREAD currently requires GDAL to perform geospatial tasks. Installation instructions for GDAL can be found XXX. Model development is replacing GDAL dependencies with Python rasterio calls, however this transition is not yet complete.
@@ -25,7 +25,7 @@ The easiest way to get started with SHREAD is to install Anaconda 3 and create a
     conda env create -f environment.yml
     conda activate shread
 
-To use SHREAD call it from the command line. An example *config file* is provided in the repo and additional documentation on the code will be forthcoming  
+To use SHREAD call it from the command line. An example *config file* is provided in the repo and additional documentation on the code will be forthcoming.  
 
     python shread.py -i [config_file] -s [%Y%m%d] -d [%Y%m%d] -t [D] -p [snodas,srpt,modscag]
 
