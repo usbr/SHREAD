@@ -5,13 +5,13 @@
 
 # SHREAD Snow Data Product Aquisition and Processing Tool
 SHREAD, the Snow-Hydrology Repo for Evaluation, Analysis, and Decision-making, is a tool for downloading, processing, and archiving snow data products, nominally to allow them to better support water management decision making. The tool is still in development, but currently provides access to the following products -
-  * NOHRSC SNODAS Snow Water Equivalent (SWE)
-  * NOHRSC SNODAS Fractional Snow-Covered Area (fSCA)
-  * NOHRSC Snow Reporters Snow Depth (SD) and SWE
-  * JPL MODSCAG MODIS-Derived Fractional Snow-Covered Area (fSCA)
-
+  * [NOHRSC SNODAS Snow Water Equivalent (SWE) and Fractional Snow-Covered Area (fSCA)](https://www.nohrsc.noaa.gov/technology/pdf/wsc2001.pdf)
+  * [NOHRSC Snow Reporters Snow Depth (SD) and SWE](https://www.nohrsc.noaa.gov/nsa/)
+  * [JPL MODSCAG MODIS-Derived Fractional Snow-Covered Area (fSCA)](https://doi.org/10.1016/j.rse.2009.01.001)
+  * [JPL MODDRFS MODIS-Derived Dust Radiative Forcing](https://doi.org/10.1029/2012GL052457)
+  
 Support for additional products is in development or planned, including -
-  * JPL MODDRFS MODIS-Derived Dust Radiative Forcing
+  
   * NASA MODIS Fractional Snow-Covered Area (fSCA)
   * USGS Landsat Fractional Snow-Covered Area (fSCA)
   * ESA Sentinel-3 Snow Products
