@@ -1,3 +1,9 @@
+---
+layout: default
+title: Data Products
+nav_order: 2
+---
+
 ## Data Products
 
 SHREAD provides access to snow-related datasets that quantify snow as snow-covered
