@@ -388,3 +388,5 @@ shread_app/data_archive.py
 testing/ds.mint.bin
 testing/ds.snow.bin
 testing/tile.html
+config/shread_config_testing_add.ini
+*.grib2

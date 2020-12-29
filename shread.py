@@ -1,5 +1,5 @@
 """
-Name: shread_utilities.py
+Name: shread.py
 Author: Dan Broman, Reclamation Technical Service Center
 Description: Utilities for downloading and processing snow products
 ADD CLASSES / FUNCTIONS DEFINED
