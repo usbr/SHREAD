@@ -1,0 +1,5 @@
+theme: jekyll-theme-minimal
+title: SHREAD
+description: Snow-Hydrology Repo for Evaluation, Analysis, and Decision-making
+logo: "https://github.com/usbr/SHREAD/blob/master/resources/images/logo_shread.png"
+show_downloads: "true"
