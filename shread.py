@@ -174,10 +174,11 @@ class config_params:
         config = configparser.RawConfigParser()
         error_flag = False
         error_wd_sec_flag = False
+        error_earthdata_sec_flag = False
         error_snodas_sec_flag = False
+        error_modis_sec_flag = False
         error_nohrsc_sec_flag = False
         error_jpl_sec_flag = False
-        error_modis_sec_flag = False
 
         try:
             config.read_file(open(config_path))
@@ -189,7 +190,9 @@ class config_params:
 
         # check that all sections are present
         wd_sec = "wd"
+        earthdata_sec = "earthdata"
         snodas_sec = "snodas"
+        modis_sec = "modis"
         nohrsc_sec = "nohrsc"
         jpl_sec = "jpl"
 
@@ -204,11 +207,23 @@ class config_params:
             error_flag = True
             error_wd_sec_flag = True
 
+        if earthdata_sec not in cfg_secs:
+            logger.error(
+                    "read_config: config file missing [{}] section".format(earthdata_sec))
+            error_flag = True
+            error_earthdata_sec_flag = True
+
         if snodas_sec not in cfg_secs:
             logger.error(
                     "read_config: config file missing [{}] section".format(snodas_sec))
             error_flag = True
             error_snodas_sec_flag = True
+
+        if modis_sec not in cfg_secs:
+            logger.error(
+                    "read_config: config file missing [{}] section".format(modis_sec))
+            error_flag = True
+            error_modis_sec_flag = True
 
         if nohrsc_sec not in cfg_secs:
             logger.error(
@@ -313,6 +328,7 @@ class config_params:
                 logger.info("read config: reading 'output_type' {}".format(self.output_type))
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("output_type", wd_sec))
+                error_flag = True
 
             #- output_format
             try:
@@ -320,6 +336,25 @@ class config_params:
                 logger.info("read config: reading 'output_format' {}".format(self.output_format))
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("output_format", wd_sec))
+                error_flag = True
+
+        # earthdata section
+        logger.info("[earthdata]")
+        if error_earthdata_sec_flag == False:
+            #- host_nohrsc
+            try:
+                self.username_earthdata = config.get(earthdata_sec, "username_earthdata")
+                logger.info("read config: reading 'username_earthdata' {}".format(self.username_earthdata))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("username_earthdata", earthdata_sec))
+                error_flag = True
+
+            #- password_earthdata
+            try:
+                self.dir_http_srpt = config.get(earthdata_sec, "password_earthdata")
+                logger.info("read config: reading 'password_earthdata'")
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("password_earthdata", earthdata_sec))
                 error_flag = True
 
         # snodas section
@@ -363,6 +398,33 @@ class config_params:
                 logger.info("read config: reading host_snodas {}".format(self.null_value_snodas))
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("null_value_snodas", snodas_sec))
+                error_flag = True
+
+        # modis section
+        logger.info("[modis]")
+        if error_modis_sec_flag == False:
+            #- host_modis
+            try:
+                self.host_modis = config.get(modis_sec, "host_modis")
+                logger.info("read config: reading 'host_modis' {}".format(self.modis_sec))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("host_modis", modis_sec))
+                error_flag = True
+
+            #- dir_http_aqua
+            try:
+                self.dir_http_aqua = config.get(modis_sec, "dir_http_aqua")
+                logger.info("read config: reading 'dir_http_aqua {}'".format(self.dir_http_aqua))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("dir_http_aqua", modis_sec))
+                error_flag = True
+
+            #- dir_http_terra
+            try:
+                self.dir_http_terra = config.get(modis_sec, "dir_http_terra")
+                logger.info("read config: reading 'dir_http_terra {}'".format(self.dir_http_terra))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("dir_http_terra", modis_sec))
                 error_flag = True
 
         # nohrsc section
@@ -422,7 +484,7 @@ class config_params:
             #- password_jpl
             try:
                 self.password_jpl = config.get(jpl_sec, "password_jpl")
-                logger.info("read config: reading 'password_jpl' {}".format(self.password_jpl))
+                logger.info("read config: reading 'password_jpl'")
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("password_jpl", jpl_sec))
                 error_flag = True
