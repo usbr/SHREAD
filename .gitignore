@@ -390,3 +390,9 @@ testing/ds.snow.bin
 testing/tile.html
 config/shread_config_testing_add.ini
 *.grib2
+scratch.py
+data/working/modis/MOD10A2.A2019073.h09v05.006.2019084024328.hdf
+data/working/modis/MOD10A2.A2019073.h09v05.006.2019084024328.hdf.xml
+data/working/modis/MYD10A2.A2019073.h09v05.006.2019084023828.hdf
+data/working/modis/MYD10A2.A2019073.h09v05.006.2019084023828.hdf.xml
+MOD10A2.A2019073.h09v05.006.2019084024328.hdf.xml

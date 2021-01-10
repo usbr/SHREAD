@@ -38,6 +38,20 @@ import fiona
 import rasterio
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from pyproj import Transformer
+import base64
+import itertools
+import ssl
+import pytz
+from tzlocal import get_localzone
+
+from getpass import getpass
+try:
+    from urllib.parse import urlparse
+    from urllib.request import urlopen, Request, build_opener, HTTPCookieProcessor
+    from urllib.error import HTTPError, URLError
+except ImportError:
+    from urlparse import urlparse
+    from urllib2 import urlopen, Request, HTTPError, URLError, build_opener, HTTPCookieProcessor
 
 def main(config_path, start_date, end_date, time_int, prod_str):
     """SHREAD main function
@@ -89,46 +103,57 @@ def main(config_path, start_date, end_date, time_int, prod_str):
     start_date = dt.datetime.strptime(start_date, '%Y%m%d')
     end_date = dt.datetime.strptime(end_date, '%Y%m%d')
 
-    date_list = pd.date_range(start_date, end_date, freq = time_int).tolist()
+    date_list = pd.date_range(start_date, end_date, freq=time_int).tolist()
     # create list of products
     prod_list = prod_str.split(',')
 
     # download data
 
     # snodas
-    if 'snodas' in prod_list :
+    if 'snodas' in prod_list:
         for date_dn in date_list:
             download_snodas(cfg, date_dn)
             org_snodas(cfg, date_dn)
 
     # srpt
-    if 'srpt' in prod_list :
+    if 'srpt' in prod_list:
         for date_dn in date_list:
             download_srpt(cfg, date_dn)
             org_srpt(cfg, date_dn)
 
+    # modscag
+    if 'modscag' in prod_list:
+        for date_dn in date_list:
+            download_modscag(cfg, date_dn)
+            org_modscag(cfg, date_dn)
+
     # moddrfs
-    if 'moddrfs' in prod_list :
+    if 'moddrfs' in prod_list:
         for date_dn in date_list:
             download_moddrfs(cfg, date_dn)
             org_moddrfs(cfg, date_dn)
 
+    # modis
+    if 'modis' in prod_list:
+        for date_dn in date_list:
+            download_modis(cfg, date_dn)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description= ' SHREAD',
-        formatter_class = argparse.ArgumentDefaultsHelpFormatter)
+        description=' SHREAD',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '-i', '--ini', metavar='PATH',
-        type = lambda x: is_valid_file(parser, x), help='Input file')
+        type=lambda x: is_valid_file(parser, x), help='Input file')
     parser.add_argument(
-        '-s', '--start', metavar ='start_date', help = 'start date')
+        '-s', '--start', metavar='start_date', help='start date')
     parser.add_argument(
-        '-e', '--end', metavar ='end_date', help = 'end date')
+        '-e', '--end', metavar='end_date', help='end date')
     parser.add_argument(
-        '-t', '--time', metavar ='time_interval', help = 'time interval')
+        '-t', '--time', metavar='time_interval', help='time interval')
     parser.add_argument(
-        '-p', '--prod', metavar ='product_list', help = 'product list')
+        '-p', '--prod', metavar='product_list', help='product list')
     args = parser.parse_args()
     return args
 
@@ -351,7 +376,7 @@ class config_params:
 
             #- password_earthdata
             try:
-                self.dir_http_srpt = config.get(earthdata_sec, "password_earthdata")
+                self.password_earthdata = config.get(earthdata_sec, "password_earthdata")
                 logger.info("read config: reading 'password_earthdata'")
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("password_earthdata", earthdata_sec))
@@ -401,31 +426,31 @@ class config_params:
                 error_flag = True
 
         # modis section
-        logger.info("[modis]")
-        if error_modis_sec_flag == False:
-            #- host_modis
-            try:
-                self.host_modis = config.get(modis_sec, "host_modis")
-                logger.info("read config: reading 'host_modis' {}".format(self.modis_sec))
-            except:
-                logger.error("read_config: '{}' missing from [{}] section".format("host_modis", modis_sec))
-                error_flag = True
-
-            #- dir_http_aqua
-            try:
-                self.dir_http_aqua = config.get(modis_sec, "dir_http_aqua")
-                logger.info("read config: reading 'dir_http_aqua {}'".format(self.dir_http_aqua))
-            except:
-                logger.error("read_config: '{}' missing from [{}] section".format("dir_http_aqua", modis_sec))
-                error_flag = True
-
-            #- dir_http_terra
-            try:
-                self.dir_http_terra = config.get(modis_sec, "dir_http_terra")
-                logger.info("read config: reading 'dir_http_terra {}'".format(self.dir_http_terra))
-            except:
-                logger.error("read_config: '{}' missing from [{}] section".format("dir_http_terra", modis_sec))
-                error_flag = True
+        # logger.info("[modis]")
+        # if error_modis_sec_flag == False:
+        #     #- host_modis
+        #     try:
+        #         self.host_modis = config.get(modis_sec, "host_modis")
+        #         logger.info("read config: reading 'host_modis' {}".format(self.modis_sec))
+        #     except:
+        #         logger.error("read_config: '{}' missing from [{}] section".format("host_modis", modis_sec))
+        #         error_flag = True
+        #
+        #     #- dir_http_aqua
+        #     try:
+        #         self.dir_http_aqua = config.get(modis_sec, "dir_http_aqua")
+        #         logger.info("read config: reading 'dir_http_aqua {}'".format(self.dir_http_aqua))
+        #     except:
+        #         logger.error("read_config: '{}' missing from [{}] section".format("dir_http_aqua", modis_sec))
+        #         error_flag = True
+        #
+        #     #- dir_http_terra
+        #     try:
+        #         self.dir_http_terra = config.get(modis_sec, "dir_http_terra")
+        #         logger.info("read config: reading 'dir_http_terra {}'".format(self.dir_http_terra))
+        #     except:
+        #         logger.error("read_config: '{}' missing from [{}] section".format("dir_http_terra", modis_sec))
+        #         error_flag = True
 
         # nohrsc section
         logger.info("[nohrsc]")
@@ -786,6 +811,8 @@ def org_snodas(cfg, date_dn):
     tif_list = glob.glob("{0}/{1}*{2}*{3}*{4}.tif".format(cfg.dir_db, 'snodas', date_str, basin_str, cfg.unit_sys))
 
     for tif in tif_list:
+        file_meta = os.path.basename(tif).replace('.', '_').split('_')
+
         if 'poly' in cfg.output_type:
             try:
                 tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['min', 'max', 'median', 'mean'])
@@ -811,6 +838,9 @@ def org_snodas(cfg, date_dn):
                 try:
                     csv_out = os.path.splitext(tif)[0] + "_poly.csv"
                     basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.insert(0, 'Source', file_meta[0])
+                    basin_poly_stats_df.insert(0, 'Type', file_meta[1])
+                    basin_poly_stats_df.insert(0, 'Date', dt.datetime.strptime(file_meta[2], '%Y%m%d').strftime('%Y-%m-%d %H:%M'))
                     basin_poly_stats_df.to_csv(csv_out, index=False)
                     logger.info("org_snodas: writing {0}".format(csv_out))
                 except:
@@ -825,22 +855,25 @@ def org_snodas(cfg, date_dn):
                 logger.error("org_snodas: error computing points zonal statistics")
             try:
                 frames = [cfg.basin_points, tif_stats_df]
-                basin_poly_stats = pd.concat(frames, axis=1)
+                basin_points_stats = pd.concat(frames, axis=1)
                 logger.info("org_snodas: merging zonal statistics")
             except:
                 logger.error("org_snodas: error merging zonal statistics")
             if 'geojson' in cfg.output_format:
                 try:
                     geojson_out = os.path.splitext(tif)[0] + "_points.geojson"
-                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    basin_points_stats.to_file(geojson_out, driver='GeoJSON')
                     logger.info("org_snodas: writing {0}".format(geojson_out))
                 except:
                     logger.error("org_snodas: error writing {0}".format(geojson_out))
             if 'csv' in cfg.output_format:
                 try:
                     csv_out = os.path.splitext(tif)[0] + "_points.csv"
-                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
-                    basin_poly_stats_df.to_csv(csv_out)
+                    basin_points_stats_df = pd.DataFrame(basin_points_stats.drop(columns = 'geometry'))
+                    basin_points_stats_df.insert(0, 'Source', file_meta[0])
+                    basin_points_stats_df.insert(0, 'Type', file_meta[1])
+                    basin_points_stats_df.insert(0, 'Date', dt.datetime.strptime(file_meta[2], '%Y%m%d').strftime('%Y-%m-%d %H:%M'))
+                    basin_points_stats_df.to_csv(csv_out, index=False)
                     logger.info("org_snodas: writing {0}".format(csv_out, index=False))
                 except:
                     logger.error("org_snodas: error writing {0}".format(csv_out))
@@ -1021,10 +1054,11 @@ def org_srpt(cfg, date_dn):
     srpt_gpd_clip = gpd.clip(srpt_gpd.to_crs(cfg.proj), cfg.basin_poly, keep_geom_type = False)
 
     # write out data
-    geojson_out = cfg.dir_db + 'snow_reporters_' + date_dn.strftime('%Y%m%d') + '_' + basin_str + '.geojson'
+    geojson_out = cfg.dir_db + 'snowreporters_obs_' + date_dn.strftime('%Y%m%d') + '_' + basin_str + '.geojson'
     srpt_gpd_clip.to_file(geojson_out, driver = 'GeoJSON')
-    csv_out = cfg.dir_db + 'snow_reporters_' + date_dn.strftime('%Y%m%d') + '_' + basin_str + '.csv'
+    csv_out = cfg.dir_db + 'snowreporters_obs_' + date_dn.strftime('%Y%m%d') + '_' + basin_str + '.csv'
     srpt_gpd_clip_df = pd.DataFrame(srpt_gpd_clip.drop(columns = 'geometry'))
+    srpt_gpd_clip_df.insert(1, 'Source', 'NOHRSCSnowReporters')
     srpt_gpd_clip_df.to_csv(csv_out, index=False)
 
     # clean up working directory
@@ -1321,6 +1355,7 @@ def org_modscag(cfg, date_dn):
     # calculate zonal statistics and export data
     tif_list = glob.glob("{0}/{1}*{2}*{3}*.tif".format(cfg.dir_db, 'modscag', date_str, basin_str))
     for tif in tif_list:
+        file_meta = os.path.basename(tif).replace('.', '_').split('_')
         if 'poly' in cfg.output_type:
             try:
                 tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['median', 'mean'])
@@ -1346,6 +1381,9 @@ def org_modscag(cfg, date_dn):
                 try:
                     csv_out = os.path.splitext(tif)[0] + "_poly.csv"
                     basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.insert(0, 'Source', file_meta[0])
+                    basin_poly_stats_df.insert(0, 'Type', file_meta[1])
+                    basin_poly_stats_df.insert(0, 'Date', dt.datetime.strptime(file_meta[2], '%Y%m%d').strftime('%Y-%m-%d %H:%M'))
                     basin_poly_stats_df.to_csv(csv_out, index=False)
                     logger.info("org_modscag: writing {0}".format(csv_out))
                 except:
@@ -1360,22 +1398,25 @@ def org_modscag(cfg, date_dn):
                 logger.error("org_modscag: error computing points zonal statistics")
             try:
                 frames = [cfg.basin_points, tif_stats_df]
-                basin_poly_stats = pd.concat(frames, axis=1)
+                basin_points_stats = pd.concat(frames, axis=1)
                 logger.info("org_modscag: merging zonal statistics")
             except:
                 logger.error("org_modscag: error merging zonal statistics")
             if 'geojson' in cfg.output_format:
                 try:
                     geojson_out = os.path.splitext(tif)[0] + "_points.geojson"
-                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    basin_points_stats.to_file(geojson_out, driver='GeoJSON')
                     logger.info("org_snodas: writing {0}".format(geojson_out))
                 except:
                     logger.error("org_snodas: error writing {0}".format(geojson_out))
             if 'csv' in cfg.output_format:
                 try:
                     csv_out = os.path.splitext(tif)[0] + "_points.csv"
-                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
-                    basin_poly_stats_df.to_csv(csv_out, index=False)
+                    basin_points_stats_df = pd.DataFrame(basin_points_stats.drop(columns = 'geometry'))
+                    basin_points_stats_df.insert(0, 'Source', file_meta[0])
+                    basin_points_stats_df.insert(0, 'Type', file_meta[1])
+                    basin_points_stats_df.insert(0, 'Date', dt.datetime.strptime(file_meta[2], '%Y%m%d').strftime('%Y-%m-%d %H:%M'))
+                    basin_points_stats_df.to_csv(csv_out, index=False)
                     logger.info("org_modscag: writing {0}".format(csv_out))
                 except:
                     logger.error("org_modscag: error writing {0}".format(csv_out))
@@ -1495,7 +1536,6 @@ def org_moddrfs(cfg, date_dn):
     Notes
     -----
 
-
     """
 
     # Proj4js.defs["SR-ORG:6974"] = "+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs";
@@ -1611,6 +1651,7 @@ def org_moddrfs(cfg, date_dn):
     # calculate zonal statistics and export data
     tif_list = glob.glob("{0}/{1}*{2}*{3}*.tif".format(cfg.dir_db, 'moddrfs', date_str, basin_str))
     for tif in tif_list:
+        file_meta = os.path.basename(tif).replace('.', '_').split('_')
         if 'poly' in cfg.output_type:
             try:
                 tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['median', 'mean'])
@@ -1636,6 +1677,9 @@ def org_moddrfs(cfg, date_dn):
                 try:
                     csv_out = os.path.splitext(tif)[0] + "_poly.csv"
                     basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.insert(0, 'Source', file_meta[0])
+                    basin_poly_stats_df.insert(0, 'Type', file_meta[1])
+                    basin_poly_stats_df.insert(0, 'Date', dt.datetime.strptime(file_meta[2], '%Y%m%d').strftime('%Y-%m-%d %H:%M'))
                     basin_poly_stats_df.to_csv(csv_out, index=False)
                     logger.info("org_moddrfs: writing {0}".format(csv_out))
                 except:
@@ -1650,22 +1694,25 @@ def org_moddrfs(cfg, date_dn):
                 logger.error("org_moddrfs: error computing points zonal statistics")
             try:
                 frames = [cfg.basin_points, tif_stats_df]
-                basin_poly_stats = pd.concat(frames, axis=1)
+                basin_points_stats = pd.concat(frames, axis=1)
                 logger.info("org_moddrfs: merging zonal statistics")
             except:
                 logger.error("org_moddrfs: error merging zonal statistics")
             if 'geojson' in cfg.output_format:
                 try:
                     geojson_out = os.path.splitext(tif)[0] + "_points.geojson"
-                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    basin_points_stats.to_file(geojson_out, driver='GeoJSON')
                     logger.info("org_snodas: writing {0}".format(geojson_out))
                 except:
                     logger.error("org_snodas: error writing {0}".format(geojson_out))
             if 'csv' in cfg.output_format:
                 try:
                     csv_out = os.path.splitext(tif)[0] + "_points.csv"
-                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
-                    basin_poly_stats_df.to_csv(csv_out, index=False)
+                    basin_points_stats_df = pd.DataFrame(basin_points_stats.drop(columns = 'geometry'))
+                    basin_points_stats_df.insert(0, 'Source', file_meta[0])
+                    basin_points_stats_df.insert(0, 'Type', file_meta[1])
+                    basin_points_stats_df.insert(0, 'Date', dt.datetime.strptime(file_meta[2], '%Y%m%d').strftime('%Y-%m-%d %H:%M'))
+                    basin_points_stats_df.to_csv(csv_out, index=False)
                     logger.info("org_moddrfs: writing {0}".format(csv_out))
                 except:
                     logger.error("org_moddrfs: error writing {0}".format(csv_out))
@@ -1679,6 +1726,91 @@ def org_moddrfs(cfg, date_dn):
         except:
             logger.error("org_moddrfs: error removing {}".format(file_path))
 
+def download_modis(cfg, date_dn):
+    """ Download modis snow data
+
+    Parameters
+    ---------
+        cfg ():
+            config_params Class object
+        date_dn: datetime
+            date in local date
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+
+    """
+
+    # create working directory
+    dir_work_d = cfg.dir_work + 'modis/'
+    if not os.path.isdir(dir_work_d):
+        os.makedirs(dir_work_d)
+
+    # format date into UTC and API format
+    # assumes local time zone for date_dn
+    date_dn_ltz = date_dn.replace(tzinfo=get_localzone())
+    date_dn_utc_start = date_dn_ltz.astimezone(pytz.utc)
+    date_dn_start = date_dn_utc_start.isoformat()[0:16] + ':00Z'
+    date_dn_utc_end = date_dn_utc_start + dt.timedelta(hours=24)
+    date_dn_end = date_dn_utc_end.isoformat()[0:16] + ':00Z'
+
+    # format bounding box
+    basin_poly_bbox_tmp = [str(element) for element in cfg.basin_poly_bbox]
+    lonlatod = [1, 0, 3, 2]
+    basin_poly_bbox_tmp2 = [basin_poly_bbox_tmp[i] for i in lonlatod]
+    basin_poly_bbox_fmt = ",".join(basin_poly_bbox_tmp2)
+
+    short_name_aqua = 'MYD10A2'
+    short_name_terra = 'MOD10A2'
+    version = '6'
+    polygon = ''
+    filename_filter = ''
+
+    # search for aqua data
+    try:
+        url_list_aqua = cmr_search(short_name_aqua, version, date_dn_start,
+                        date_dn_end, bounding_box=basin_poly_bbox_fmt,
+                        polygon=polygon, filename_filter=filename_filter)
+    except:
+        url_list_aqua = []
+
+    # search for terra data
+    try:
+        url_list_terra = cmr_search(short_name_terra, version, date_dn_start,
+                        date_dn_end, bounding_box=basin_poly_bbox_fmt,
+                        polygon=polygon, filename_filter=filename_filter)
+    except:
+        url_list_terra = []
+
+    # combine data results together
+    url_list = url_list_aqua + url_list_terra
+    print(url_list)
+    if len(url_list) > 0:
+        credentials = '{0}:{1}'.format(cfg.username_earthdata, cfg.password_earthdata)
+        credentials = base64.b64encode(credentials.encode('ascii')).decode('ascii')
+
+        for index, url in enumerate(url_list, start=1):
+            file_name = url.split('/')[-1]
+            file_path = dir_work_d + file_name
+            try:
+                req = Request(url)
+                if credentials:
+                    req.add_header('Authorization', 'Basic {0}'.format(credentials))
+                opener = build_opener(HTTPCookieProcessor())
+                data = opener.open(req).read()
+                open(file_path, 'wb').write(data)
+            except HTTPError as e:
+                logger.info(('HTTP error {0}, {1}'.format(e.code, e.reason)))
+            except URLError as e:
+                logger.info(('URL error: {0}'.format(e.reason)))
+            except IOError:
+                raise
+    else:
+        logger.info("download_modis: no data found")
 
 def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
     """wrapper around gdalwarp for reprojecting rasters
@@ -2615,6 +2747,7 @@ def find_tiles(bbox):
 
     Returns the tile IDs that need to be downloaded for
     a given region bounded by *bbox*.
+
     """
     logger.info("find_tiles: finding modis tiles for provided spatial area")
     def intersects(bbox, tile):
@@ -2645,6 +2778,346 @@ def find_tiles(bbox):
         ids = [(t[0], t[1]) for t in tiles if intersects(bbox, t)]
         ids_fmt = ["h" + "{:02d}".format(t[1]) + "v" + "{:02d}".format(t[0]) for t in ids]
     return ids_fmt
+
+def get_credentials():
+    """Build user credentials from config file username and password
+
+    Parameters
+    ---------
+        None
+    Returns
+    -------
+        credentials: array
+            encoded array of username and password
+
+    Notes
+    -----
+    Code modified from NSIDC retrieval script
+
+    """
+    credentials = None
+    errprefix = ''
+
+    credentials = '{0}:{1}'.format(cfg.username_earthdata, cfg.password_earthdata)
+    credentials = base64.b64encode(credentials.encode('ascii')).decode('ascii')
+
+    return credentials
+
+
+def build_version_query_params(version):
+    """Build API version query
+
+    Parameters
+    ---------
+        version: string
+            dataset version number
+    Returns
+    -------
+        query_params: array
+            API formatted filter for version number
+
+    Notes
+    -----
+    Code modified from NSIDC retrieval script
+
+    """
+    desired_pad_length = 3
+    if len(version) > desired_pad_length:
+        print('Version string too long: "{0}"'.format(version))
+        quit()
+
+    version = str(int(version))  # Strip off any leading zeros
+    query_params = ''
+
+    while len(version) <= desired_pad_length:
+        padded_version = version.zfill(desired_pad_length)
+        query_params += '&version={0}'.format(padded_version)
+        desired_pad_length -= 1
+    return query_params
+
+def filter_add_wildcards(filter):
+    """Build API wildcards
+
+    Parameters
+    ---------
+        filter: string
+            data filter
+    Returns
+    -------
+        filter: array
+            API formatted filter
+    Notes
+    -----
+    Code modified from NSIDC retrieval script
+
+        """
+
+    if not filter.startswith('*'):
+        filter = '*' + filter
+    if not filter.endswith('*'):
+        filter = filter + '*'
+    return filter
+
+
+def build_filename_filter(filename_filter):
+    """Build API filename filter
+
+    Parameters
+    ---------
+        filename_filter: string
+            filename filter
+    Returns
+    -------
+        result: array
+            API formatted filename filter
+    Notes
+    -----
+    Code modified from NSIDC retrieval script
+
+        """
+
+    filters = filename_filter.split(',')
+    result = '&options[producer_granule_id][pattern]=true'
+    for filter in filters:
+        result += '&producer_granule_id[]=' + filter_add_wildcards(filter)
+    return result
+
+
+def build_cmr_query_url(short_name, version, time_start, time_end,
+                        bounding_box=None, polygon=None,
+                        filename_filter=None):
+
+    """Build NASA Earth Observing System (EOS) Common Metadata Repository (CMR)
+        query
+
+    Parameters
+    ---------
+        short_name: string
+            dataset short name
+        version: string
+            dataset version number
+        time_start: datetime
+            start datetime for data filter
+        time_end: datetime
+            end datetime for data filter
+        bounding_box: string
+            cmd_string of bounding box coordinates
+                'lon_min,lat_min,lon_max,lat_max'
+                optional, but required if polygon not provided
+        polygon: string
+            string of points defining polygon
+                'lon1,lat1,lon2,lat2,...,lonN,latN'
+                optional, but required if bounding_box not provided
+    Returns
+    -------
+        CMR_FILE_URL + params: string
+            API query
+    Notes
+    -----
+    Code modified from NSIDC retrieval script
+
+    """
+    CMR_URL = 'https://cmr.earthdata.nasa.gov'
+    URS_URL = 'https://urs.earthdata.nasa.gov'
+    CMR_PAGE_SIZE = 2000
+    CMR_FILE_URL = ('{0}/search/granules.json?provider=NSIDC_ECS'
+                    '&sort_key[]=start_date&sort_key[]=producer_granule_id'
+                    '&scroll=true&page_size={1}'.format(CMR_URL, CMR_PAGE_SIZE))
+
+    params = '&short_name={0}'.format(short_name)
+    params += build_version_query_params(version)
+    params += '&temporal[]={0},{1}'.format(time_start, time_end)
+    if polygon:
+        params += '&polygon={0}'.format(polygon)
+    elif bounding_box:
+        params += '&bounding_box={0}'.format(bounding_box)
+    if filename_filter:
+        params += build_filename_filter(filename_filter)
+    return CMR_FILE_URL + params
+
+
+def cmr_download(urls):
+    """Download files from list of urls.
+
+    Parameters
+    ---------
+        urls: list
+            list of urls to download
+
+    Returns
+    -------
+        None
+    Notes
+    -----
+    Code modified from NSIDC retrieval script
+
+    """
+    if not urls:
+        return
+
+    url_count = len(urls)
+    print('Downloading {0} files...'.format(url_count))
+    credentials = None
+
+    for index, url in enumerate(urls, start=1):
+        if not credentials and urlparse(url).scheme == 'https':
+            credentials = get_credentials()
+
+        filename = url.split('/')[-1]
+        print('{0}/{1}: {2}'.format(str(index).zfill(len(str(url_count))),
+                                    url_count,
+                                    filename))
+
+        try:
+            # In Python 3 we could eliminate the opener and just do 2 lines:
+            # resp = requests.get(url, auth=(username, password))
+            # open(filename, 'wb').write(resp.content)
+            req = Request(url)
+            if credentials:
+                req.add_header('Authorization', 'Basic {0}'.format(credentials))
+            opener = build_opener(HTTPCookieProcessor())
+            data = opener.open(req).read()
+            open(filename, 'wb').write(data)
+        except HTTPError as e:
+            print('HTTP error {0}, {1}'.format(e.code, e.reason))
+        except URLError as e:
+            print('URL error: {0}'.format(e.reason))
+        except IOError:
+            raise
+
+
+def cmr_filter_urls(search_results):
+    """Select only the desired data files from CMR response.
+
+    Parameters
+    ---------
+        search_results: list
+            list of search results
+
+    Returns
+    -------
+        urls: list
+            filtered list of urls
+    Notes
+    -----
+    Code modified from NSIDC retrieval script
+
+    """
+    if 'feed' not in search_results or 'entry' not in search_results['feed']:
+        return []
+
+    entries = [e['links']
+               for e in search_results['feed']['entry']
+               if 'links' in e]
+    # Flatten "entries" to a simple list of links
+    links = list(itertools.chain(*entries))
+
+    urls = []
+    unique_filenames = set()
+    for link in links:
+        if 'href' not in link:
+            # Exclude links with nothing to download
+            continue
+        if 'inherited' in link and link['inherited'] is True:
+            # Why are we excluding these links?
+            continue
+        if 'rel' in link and 'data#' not in link['rel']:
+            # Exclude links which are not classified by CMR as "data" or "metadata"
+            continue
+
+        if 'title' in link and 'opendap' in link['title'].lower():
+            # Exclude OPeNDAP links--they are responsible for many duplicates
+            # This is a hack; when the metadata is updated to properly identify
+            # non-datapool links, we should be able to do this in a non-hack way
+            continue
+
+        filename = link['href'].split('/')[-1]
+        if filename in unique_filenames:
+            # Exclude links with duplicate filenames (they would overwrite)
+            continue
+        unique_filenames.add(filename)
+
+        urls.append(link['href'])
+
+    return urls
+
+
+def cmr_search(short_name, version, time_start, time_end,
+               bounding_box='', polygon='', filename_filter=''):
+    """Perform a scrolling CMR query for files matching input criteria.
+
+        Parameters
+        ---------
+            short_name: string
+                dataset short name
+            version: string
+                dataset version number
+            time_start: datetime
+                start datetime for data filter
+            time_end: datetime
+                end datetime for data filter
+            bounding_box: string
+                cmd_string of bounding box coordinates
+                    'lon_min,lat_min,lon_max,lat_max'
+            polygon: string
+                string of points defining polygon
+                    'lon1,lat1,lon2,lat2,...,lonN,latN'
+            filename_filter: string
+                filename filter
+
+        Returns
+        -------
+            urls: list
+                list of urls
+        Notes
+        -----
+        Code modified from NSIDC retrieval script
+
+        """
+
+    CMR_PAGE_SIZE = 2000
+    cmr_query_url = build_cmr_query_url(short_name=short_name, version=version,
+                                        time_start=time_start, time_end=time_end,
+                                        bounding_box=bounding_box,
+                                        polygon=polygon, filename_filter=filename_filter)
+    print('Querying for data:\n\t{0}\n'.format(cmr_query_url))
+
+    cmr_scroll_id = None
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    try:
+        urls = []
+        while True:
+            req = Request(cmr_query_url)
+            if cmr_scroll_id:
+                req.add_header('cmr-scroll-id', cmr_scroll_id)
+            response = urlopen(req, context=ctx)
+            if not cmr_scroll_id:
+                # Python 2 and 3 have different case for the http headers
+                headers = {k.lower(): v for k, v in dict(response.info()).items()}
+                cmr_scroll_id = headers['cmr-scroll-id']
+                hits = int(headers['cmr-hits'])
+                if hits > 0:
+                    print('Found {0} matches.'.format(hits))
+                else:
+                    print('Found no matches.')
+            search_page = response.read()
+            search_page = json.loads(search_page.decode('utf-8'))
+            url_scroll_results = cmr_filter_urls(search_page)
+            if not url_scroll_results:
+                break
+            if hits > CMR_PAGE_SIZE:
+                print('.', end='')
+                sys.stdout.flush()
+            urls += url_scroll_results
+
+        if hits > CMR_PAGE_SIZE:
+            print()
+        return urls
+    except KeyboardInterrupt:
+        quit()
 
 if __name__ == '__main__':
     args = parse_args()
