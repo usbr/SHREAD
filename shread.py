@@ -1702,9 +1702,9 @@ def org_moddrfs(cfg, date_dn):
                 try:
                     geojson_out = os.path.splitext(tif)[0] + "_points.geojson"
                     basin_points_stats.to_file(geojson_out, driver='GeoJSON')
-                    logger.info("org_snodas: writing {0}".format(geojson_out))
+                    logger.info("org_moddrfs: writing {0}".format(geojson_out))
                 except:
-                    logger.error("org_snodas: error writing {0}".format(geojson_out))
+                    logger.error("org_moddrfs: error writing {0}".format(geojson_out))
             if 'csv' in cfg.output_format:
                 try:
                     csv_out = os.path.splitext(tif)[0] + "_points.csv"
@@ -1811,6 +1811,173 @@ def download_modis(cfg, date_dn):
                 raise
     else:
         logger.info("download_modis: no data found")
+
+def download_ndfd(parameter, flen=7, crs_out, overwrite_flag = False):
+    """download and format national digital forecast data
+    Parameters
+    ---------
+        parameter: string
+            ndfd parameter -
+            https://www.nws.noaa.gov/xml/docs/elementInputNames.php
+        flen: integer
+            forecast length in days
+                Default - 7
+                values from 1 to 7 are valid
+        crs_out: string
+            EPSG spatial reference for output raster coordinate system in
+                'EPSG:X' format
+        overwrite_flag: boolean
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    function can only download latest forecast
+    only valid right now for CONUS
+    """
+
+    dir_work_ndfd = cfg.dir_work + 'ndfd/'
+
+    if not os.path.isdir(dir_work_ndfd):
+        os.makedirs(dir_work_ndfd)
+
+    # cfg.host_ndfd
+    host_ndfd = 'https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.conus/'
+    # retrieve data for forecast length desired
+    # forecasts are stored in three files:
+    #   1-3 days
+    #   4-7 days
+    #   8-450 days
+    flen_dirs = ['VP.001-003', 'VP.004-007']
+    if flen in range(1,4):
+        iflen = 0
+    elif flen in range(3,8):
+        iflen = 1
+    else:
+        error('flen must be between 1 and 7')
+
+    for i in range(0,iflen):
+        grib_name_url = 'ds.' + parameter + '.bin'
+        grib_name_path = parameter + '_' + flen_dirs[i] + '.bin'
+        grib_url = host_ndfd + flen_dirs[i] + '/' + grib_name_url
+        grib_path = dir_work_ndfd + grib_name_path
+
+        if os.path.isfile(grib_path) and overwrite_flag:
+            os.remove(grib_path)
+
+        if not os.path.isfile(grib_path):
+            logger.info("download_ndfd: downloading from {}".format(grib_url))
+            logger.info("download_ndfd: downloading to {}".format(grib_path))
+            try:
+                urllib.request.urlretrieve(grib_url, grib_path)
+            except IOError as e:
+                logger.error("download_ndfd: error downloading")
+                logging.error(e)
+
+        # read grib with pygrib to get message info
+        grbs = pygrib.open(grib_path)
+
+        # read first message to get forcast init time
+        grb = grbs[1]
+        fcst_init_raw = str(grb).split('from ',1)[1]
+        fcst_init = dt.datetime.strptime(fcst_init_raw, '%Y%m%d%H%M')
+        # read grib as raster; reproject, write out individual forecast tifs,
+        # clip data
+        tif_out_head = dir_work_ndfd + parameter + '_'
+        with rasterio.open(grib_path) as src:
+            transform, width, height = calculate_default_transform(
+                src.crs, crs_out, src.width, src.height, *src.bounds)
+            kwargs = src.meta.copy()
+            kwargs.update({
+                'crs': crs_out,
+                'transform': transform,
+                'width': width,
+                'height': height,
+                'count': 1
+            })
+
+            for bnd in range(1, src.count + 1):
+                if flen_dirs[i] == 'VP.001-003':
+                    fct = str(bnd)
+                elif flen_dirs[i] == 'VP.004-007':
+                    fct = str(bnd + 3)
+                tif_out_band = tif_out_head + fct + '.tif'
+                with rasterio.open(tif_out_band, 'w', **kwargs) as dst:
+                    reproject(
+                        source=rasterio.band(src, bnd),
+                        destination=rasterio.band(dst, 1),
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=transform,
+                        dst_crs=crs_out,
+                        resampling=Resampling.nearest)
+
+        # clip to basin polygon
+        tif_list = glob.glob("{0}/*{1}*{2}*{3}.tif".format(dir_work_ndfd, proj_str, "forc"))
+        for tif in tif_list:
+            tif_out = dir_work_moddrfs + "moddrfs_forc_" + date_str + "_" + basin_str + ".tif"
+            try:
+                gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, cfg.proj, cfg.proj, 2500)
+                logger.info("org_moddrfs: clipping {} to {}".format(tif, tif_out))
+            except:
+                logger.error("org_moddrfs: error clipping {} to {}".format(tif, tif_out))
+        if not tif_list:
+            logger.error("org_moddrfs: error finding tifs to clip")
+
+
+
+
+
+
+
+        grbs = pygrib.open(grib_path)
+
+        # read first message to get lat and lon
+        grb = grbs[1]
+        lats, lons = grb.latlons()  # WGS84 projection
+        lat_vec = np.reshape(lats, [-1,1])
+        lon_vec = np.reshape(lons, [-1,1])
+
+        # get forcast init time
+        fcst_init_raw = str(grb).split('from ',1)[1]
+        fcst_init = dt.datetime.strptime(fcst_init_raw, '%Y%m%d%H%M')
+        fcst_init_fmt = dt.datetime.strftime(fcst_init, '%Y%m%d_%H%M')
+
+        # loop through each valid date (forecast period)
+        for grb in grbs:
+            print(grb)
+            date_fcst = grb.validDate
+            var_fcst = grb.name
+            units_fcst = grb.units
+            vals_fcst = np.reshape(grb.values, [-1,1])
+
+            # unit conversion - there's a better way to do this, but this will work for now
+            if units_fcst == 'K' & cfg.unit_sys == 'english':
+                vals_fcst = (vals_fcst - 273.15) * 1.8 + 32
+            if units_fcst == 'K' & cfg.unit_sys == 'metric':
+                vals_fcst = (vals_fcst - 273.15)
+            # put forecast values into a pandas dataframe
+            df = pd.DataFrame({'lat': lat_vec[:,0],
+                               'lon': lon_vec[:,0], 'vals': vals_fcst[:,0]})
+            # filter pandas data frame to bounding box
+            df_fl = df[(df['lon'] >= self.basin_poly_bbox[0]) &
+               (df['lat'] >= self.basin_poly_bbox[1]) &
+               (df['lon'] <= self.basin_poly_bbox[2]) &
+               (df['lat'] <= self.basin_poly_bbox[3])]
+
+            fcst_gpd = gpd.GeoDataFrame(df_fl, geometry=gpd.points_from_xy(df_fl.lon, df_fl.lat))
+
+            fcst_gpd_clip = gpd.clip(fcst_gpd.to_crs(cfg.proj), cfg.basin_poly, keep_geom_type = False)
+
+            # write out data
+            geojson_out = cfg.dir_db + 'snowreporters_obs_' + date_dn.strftime('%Y%m%d') + '_' + basin_str + '.geojson'
+            srpt_gpd_clip.to_file(geojson_out, driver = 'GeoJSON')
+            csv_out = cfg.dir_db + 'snowreporters_obs_' + date_dn.strftime('%Y%m%d') + '_' + basin_str + '.csv'
+            srpt_gpd_clip_df = pd.DataFrame(srpt_gpd_clip.drop(columns = 'geometry'))
+            srpt_gpd_clip_df.insert(1, 'Source', 'NOHRSCSnowReporters')
+            srpt_gpd_clip_df.to_csv(csv_out, index=False)
+
 
 def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
     """wrapper around gdalwarp for reprojecting rasters
