@@ -204,7 +204,7 @@ class config_params:
         error_modis_sec_flag = False
         error_nohrsc_sec_flag = False
         error_jpl_sec_flag = False
-
+        error_noaa_sec_flag = False
         try:
             config.read_file(open(config_path))
             logger.info("read_config: reading config file '{}'".format(config_path))
@@ -220,7 +220,7 @@ class config_params:
         modis_sec = "modis"
         nohrsc_sec = "nohrsc"
         jpl_sec = "jpl"
-
+        noaa_sec = "noaa"
         # ADD SECTIONS AS NEW SNOW PRODUCTS ARE ADDED
 
         cfg_secs = config.sections()
@@ -261,6 +261,12 @@ class config_params:
                     "read_config: config file missing [{}] section".format(jpl_sec))
             error_flag = True
             error_jpl_sec_flag = True
+
+        if noaa_sec not in cfg_secs:
+            logger.error(
+                    "read_config: config file missing [{}] section".format(noaa_sec))
+            error_flag = True
+            error_noaa_sec_flag = True
 
         # read file
         # wd section
@@ -528,6 +534,24 @@ class config_params:
                 logger.info("read config: reading 'dir_http_moddrfs' {}".format(self.dir_http_moddrfs))
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("dir_http_moddrfs", jpl_sec))
+                error_flag = True
+
+        # noaa section
+        logger.info("[noaa]")
+        if error_noaa_sec_flag == False:
+            #- host_ndfd
+            try:
+                self.host_ndfd = config.get(noaa_sec, "host_ndfd")
+                logger.info("read config: reading 'host_ndfd' {}".format(self.host_ndfd))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("host_ndfd", noaa_sec))
+                error_flag = True
+            #- ndfd_parameters
+            try:
+                self.ndfd_parameters = config.get(noaa_sac, "ndfd_parameters")
+                logger.info("read config: reading 'ndfd_parameters' {}".format(self.ndfd_parameters))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("ndfd_parameters", noaa_sec))
                 error_flag = True
 
         if error_flag == True:
@@ -1841,6 +1865,9 @@ def download_ndfd(parameter, flen=7, crs_out, overwrite_flag = False):
 
     if not os.path.isdir(dir_work_ndfd):
         os.makedirs(dir_work_ndfd)
+    basin_str = os.path.splitext(os.path.basename(cfg.basin_poly_path))[0]
+    chr_rm = [":"]
+    proj_str = ''.join(i for i in crs_out if not i in chr_rm)
 
     # cfg.host_ndfd
     host_ndfd = 'https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.conus/'
@@ -1848,14 +1875,18 @@ def download_ndfd(parameter, flen=7, crs_out, overwrite_flag = False):
     # forecasts are stored in three files:
     #   1-3 days
     #   4-7 days
-    #   8-450 days
+    #   8-450 days - not used
     flen_dirs = ['VP.001-003', 'VP.004-007']
     if flen in range(1,4):
-        iflen = 0
-    elif flen in range(3,8):
         iflen = 1
+    elif flen in range(3,8):
+        iflen = 2
     else:
         error('flen must be between 1 and 7')
+
+    # qpf only available for 1-3 days
+    if parameter == 'qpf'or parameter == 'snow':
+        iflen = 1
 
     for i in range(0,iflen):
         grib_name_url = 'ds.' + parameter + '.bin'
@@ -1880,11 +1911,13 @@ def download_ndfd(parameter, flen=7, crs_out, overwrite_flag = False):
 
         # read first message to get forcast init time
         grb = grbs[1]
-        fcst_init_raw = str(grb).split('from ',1)[1]
-        fcst_init = dt.datetime.strptime(fcst_init_raw, '%Y%m%d%H%M')
+        date_init_str = str(grb).split('from ',1)[1].split(':',1)[0]
+        date_init = dt.datetime.strptime(date_init_str, '%Y%m%d%H%M')
+
+
         # read grib as raster; reproject, write out individual forecast tifs,
         # clip data
-        tif_out_head = dir_work_ndfd + parameter + '_'
+        tif_out_head = dir_work_ndfd + parameter + '_' + date_init_str + '_'
         with rasterio.open(grib_path) as src:
             transform, width, height = calculate_default_transform(
                 src.crs, crs_out, src.width, src.height, *src.bounds)
@@ -1898,11 +1931,11 @@ def download_ndfd(parameter, flen=7, crs_out, overwrite_flag = False):
             })
 
             for bnd in range(1, src.count + 1):
-                if flen_dirs[i] == 'VP.001-003':
-                    fct = str(bnd)
-                elif flen_dirs[i] == 'VP.004-007':
-                    fct = str(bnd + 3)
-                tif_out_band = tif_out_head + fct + '.tif'
+                grb = grbs[bnd]
+
+                # read valid date from grb message
+                valid_date_str = dt.datetime.strftime(grb.validDate, '%Y%m%d%H%M')
+                tif_out_band = tif_out_head + valid_date_str + '.tif'
                 with rasterio.open(tif_out_band, 'w', **kwargs) as dst:
                     reproject(
                         source=rasterio.band(src, bnd),
@@ -1912,22 +1945,53 @@ def download_ndfd(parameter, flen=7, crs_out, overwrite_flag = False):
                         dst_transform=transform,
                         dst_crs=crs_out,
                         resampling=Resampling.nearest)
+        grbs.close()
 
         # clip to basin polygon
-        tif_list = glob.glob("{0}/*{1}*{2}*{3}.tif".format(dir_work_ndfd, proj_str, "forc"))
+        tif_list = glob.glob("{0}/*{1}*{2}*.tif".format(dir_work_ndfd, parameter, date_init_str))
         for tif in tif_list:
-            tif_out = dir_work_moddrfs + "moddrfs_forc_" + date_str + "_" + basin_str + ".tif"
+            date_valid_str = tif.split("_")[2].split(".")[0]
+            tif_out = dir_work_ndfd + "ndfd_" + parameter + "_" + date_init_str + "_" + date_valid_str + "_" + basin_str + "_" + proj_str + ".tif"
             try:
-                gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, cfg.proj, cfg.proj, 2500)
-                logger.info("org_moddrfs: clipping {} to {}".format(tif, tif_out))
+                gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, crs_out, crs_out, -9999)
+                logger.info("download_ndfd: clipping {} to {}".format(tif, tif_out))
             except:
-                logger.error("org_moddrfs: error clipping {} to {}".format(tif, tif_out))
+                logger.error("download_ndfd: error clipping {} to {}".format(tif, tif_out))
         if not tif_list:
-            logger.error("org_moddrfs: error finding tifs to clip")
+            logger.error("download_ndfd: error finding tifs to clip")
 
+        # convert units
+        tif_list = glob.glob("{0}/*{1}*{2}*{3}*.tif".format(dir_work_ndfd, 'ndfd', parameter, date_init_str))
 
+        # mm to inches conversion
+        if parameter == 'pop12' or parameter == 'snow':
+            if cfg.unit_sys == 'english':
+                calc_exp = '(+ 1 (* .0393701 (read 1)))' # inches
+            if cfg.unit_sys == 'metric':
+                calc_exp = '(read 1)' # keep units in mm
 
+        # c to f conversion
+        if parameter == 'mint' or parameter == 'maxt':
+            if cfg.unit_sys == 'english':
+                calc_exp = '(+ 1 (* 1.8 + 32 (read 1)))' # deg. F
+            if cfg.unit_sys == 'metric':
+                calc_exp = '(read 1)' # keep units in deg. C
 
+        tif_list = glob.glob("{0}/*{1}*{2}{3}*{4}*{5}.tif".format(dir_work_ndfd, 'ndfd', parameter, date_init_str, basin_str, proj_str))
+
+        for tif in tif_list:
+            tif_int = os.path.splitext(tif)[0] + "_" + dtype_out + ".tif"
+            tif_out = cfg.dir_db + "ndfd_" + parameter + date_init_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
+            try:
+                rio_dtype_conversion(tif, tif_int, dtype_out)
+                rio_calc(tif_int, tif_out, calc_exp)
+                logger.info("org_snodas: calc {} {} to {}".format(calc_exp, tif, tif_out))
+            except:
+                logger.error("org_snodas: error calc {} to {}".format(tif, tif_out))
+        if not tif_list:
+            logger.error("org_snodas: error finding tifs to calc")
+
+        # end of iflen loop 
 
 
 
