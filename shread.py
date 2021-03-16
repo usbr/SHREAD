@@ -548,7 +548,7 @@ class config_params:
                 error_flag = True
             #- ndfd_parameters
             try:
-                self.ndfd_parameters = config.get(noaa_sac, "ndfd_parameters")
+                self.ndfd_parameters = config.get(noaa_sec, "ndfd_parameters")
                 logger.info("read config: reading 'ndfd_parameters' {}".format(self.ndfd_parameters))
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("ndfd_parameters", noaa_sec))
@@ -903,13 +903,13 @@ def org_snodas(cfg, date_dn):
                     logger.error("org_snodas: error writing {0}".format(csv_out))
 
     # clean up working directory
-    for file in os.listdir(dir_work_snodas):
-        file_path = dir_work_snodas + file
-        try:
-            os.remove(file_path)
-            logger.info("org_snodas: removing {}".format(file_path))
-        except:
-            logger.error("org_snodas: error removing {}".format(file_path))
+    # for file in os.listdir(dir_work_snodas):
+    #     file_path = dir_work_snodas + file
+    #     try:
+    #         os.remove(file_path)
+    #         logger.info("org_snodas: removing {}".format(file_path))
+    #     except:
+    #         logger.error("org_snodas: error removing {}".format(file_path))
 
 
 def download_srpt(cfg, date_dn, overwrite_flag = False):
@@ -1836,7 +1836,7 @@ def download_modis(cfg, date_dn):
     else:
         logger.info("download_modis: no data found")
 
-def download_ndfd(parameter, flen=7, crs_out, overwrite_flag = False):
+def download_ndfd(parameter, flen, crs_out, overwrite_flag=False):
     """download and format national digital forecast data
     Parameters
     ---------
@@ -1991,7 +1991,7 @@ def download_ndfd(parameter, flen=7, crs_out, overwrite_flag = False):
         if not tif_list:
             logger.error("org_snodas: error finding tifs to calc")
 
-        # end of iflen loop 
+        # end of iflen loop
 
 
 
