@@ -112,32 +112,74 @@ def main(config_path, start_date, end_date, time_int, prod_str):
     # snodas
     if 'snodas' in prod_list:
         for date_dn in date_list:
-            download_snodas(cfg, date_dn)
-            org_snodas(cfg, date_dn)
-
+            error_flag = False
+            try:
+                download_snodas(cfg, date_dn)
+            except:
+                logger.info("download_snodas: error downloading srpt for '{}'".format(date_dn))
+                error_flag = True
+            if error_flag is False:
+                try:
+                    org_snodas(cfg, date_dn)
+                except:
+                    logger.info("org_snodas: error processing snodas for '{}'".format(date_dn))
     # srpt
     if 'srpt' in prod_list:
         for date_dn in date_list:
-            download_srpt(cfg, date_dn)
-            org_srpt(cfg, date_dn)
-
+            error_flag = False
+            try:
+                download_srpt(cfg, date_dn)
+            except:
+                logger.info("download_srpt: error downloading srpt for '{}'".format(date_dn))
+                error_flag = True
+            if error_flag is False:
+                try:
+                    org_srpt(cfg, date_dn)
+                except:
+                    logger.info("org_srpt: error processing srpt for '{}'".format(date_dn))
     # modscag
     if 'modscag' in prod_list:
         for date_dn in date_list:
-            download_modscag(cfg, date_dn)
-            org_modscag(cfg, date_dn)
+            error_flag = False
+            try:
+                download_modscag(cfg, date_dn)
+            except:
+                logger.info("download_modscag: error downloading modscag for '{}'".format(date_dn))
+                error_flag = True
+            if error_flag is False:
+                try:
+                    org_modscag(cfg, date_dn)
+                except:
+                    logger.info("org_modscag: error processing modscag for '{}'".format(date_dn))
 
     # moddrfs
     if 'moddrfs' in prod_list:
         for date_dn in date_list:
-            download_moddrfs(cfg, date_dn)
-            org_moddrfs(cfg, date_dn)
-
+            error_flag = False
+            try:
+                download_moddrfs(cfg, date_dn)
+            except:
+                logger.info("download_moddrfs: error downloading moddrfs for '{}'".format(date_dn))
+                error_flag = True
+            if error_flag is False:
+                try:
+                    org_moddrfs(cfg, date_dn)
+                except:
+                    logger.info("org_moddrfs: error processing moddrfs for '{}'".format(date_dn))
     # modis
     if 'modis' in prod_list:
         for date_dn in date_list:
-            download_modis(cfg, date_dn)
-
+            error_flag = False
+            try:
+                download_modis(cfg, date_dn)
+            except:
+                logger.info("download_modis: error downloading modis for '{}'".format(date_dn))
+                error_flag = True
+            # if error_flag is False:
+            #     try:
+            #         org_modis(cfg, date_dn)
+            #     except:
+            #         logger.info("org_modis: error processing modis for '{}'".format(date_dn))
 
 def parse_args():
     parser = argparse.ArgumentParser(
