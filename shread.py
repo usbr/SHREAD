@@ -572,6 +572,15 @@ class config_params:
                 logger.error("read_config: '{}' missing from [{}] section".format("dir_http_moddrfs", jpl_sec))
                 error_flag = True
 
+            #- ssl_verify
+            try:
+                self.ssl_verify = config.get(jpl_sec, "ssl_verify")
+                self.ssl_verify = str2bool(self.ssl_verify)
+                logger.info("read config: reading 'ssl_verify' {}".format(self.ssl_verify))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("ssl_verify", jpl_sec))
+                error_flag = True
+
         if error_flag == True:
             sys.exit()
 
@@ -857,7 +866,7 @@ def org_snodas(cfg, date_dn):
 
         if 'poly' in cfg.output_type:
             try:
-                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['min', 'max', 'median', 'mean'])
+                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['min', 'max', 'median', 'mean'], all_touched=True)
                 tif_stats_df = pd.DataFrame(tif_stats)
                 logger.info("org_snodas: computing zonal statistics")
             except:
@@ -890,7 +899,7 @@ def org_snodas(cfg, date_dn):
 
         if 'points' in cfg.output_type:
             try:
-                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['min', 'max', 'median', 'mean'])
+                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['min', 'max', 'median', 'mean'], all_touched=True)
                 tif_stats_df = pd.DataFrame(tif_stats)
                 logger.info("org_snodas: computing points zonal statistics")
             except:
@@ -1187,7 +1196,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
     """
 
     site_url = cfg.host_jpl + cfg.dir_http_modscag + date_dn.strftime('%Y') + "/" + date_dn.strftime('%j')
-    r = requests.get(site_url, auth=HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
+    r = requests.get(site_url, auth=HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl), verify=cfg.ssl_verify)
     if r.status_code == 200:
         dir_work_d = cfg.dir_work + 'modscag/'
         if not os.path.isdir(dir_work_d):
@@ -1210,7 +1219,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
                 logger.info("download_modscag: downloading from {}".format(tif_fsca_url))
                 logger.info("download_modscag: downloading to {}".format(tif_fsca_path))
                 try:
-                    r = requests.get(tif_fsca_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
+                    r = requests.get(tif_fsca_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl), verify=cfg.ssl_verify)
                     if r.status_code == 200:
                         with open(tif_fsca_path, 'wb') as rfile:
                             rfile.write(r.content)
@@ -1234,7 +1243,7 @@ def download_modscag(cfg, date_dn, overwrite_flag = False):
                     logger.info("download_modscag: downloading from {}".format(tif_vfrac_url))
                     logger.info("download_modscag: downloading to {}".format(tif_vfrac_path))
                     try:
-                        r = requests.get(tif_vfrac_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
+                        r = requests.get(tif_vfrac_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl), verify=cfg.ssl_verify)
                         if r.status_code == 200:
                             with open(tif_vfrac_path, 'wb') as rfile:
                                 rfile.write(r.content)
@@ -1400,7 +1409,7 @@ def org_modscag(cfg, date_dn):
         file_meta = os.path.basename(tif).replace('.', '_').split('_')
         if 'poly' in cfg.output_type:
             try:
-                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['median', 'mean'])
+                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['median', 'mean'], all_touched=True)
                 tif_stats_df = pd.DataFrame(tif_stats)
                 logger.info("org_modscag: computing zonal statistics")
             except:
@@ -1433,7 +1442,7 @@ def org_modscag(cfg, date_dn):
 
         if 'points' in cfg.output_type:
             try:
-                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['median', 'mean'])
+                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['median', 'mean'], all_touched=True)
                 tif_stats_df = pd.DataFrame(tif_stats)
                 logger.info("org_modscag: computing points zonal statistics")
             except:
@@ -1501,7 +1510,7 @@ def download_moddrfs(cfg, date_dn, overwrite_flag = False):
     """
 
     site_url = cfg.host_jpl + cfg.dir_http_moddrfs + date_dn.strftime('%Y') + "/" + date_dn.strftime('%j')
-    r = requests.get(site_url, auth=HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
+    r = requests.get(site_url, auth=HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl), verify=cfg.ssl_verify)
     if r.status_code == 200:
         dir_work_d = cfg.dir_work + 'moddrfs/'
         if not os.path.isdir(dir_work_d):
@@ -1524,7 +1533,7 @@ def download_moddrfs(cfg, date_dn, overwrite_flag = False):
                 logger.info("download_moddrfs: downloading from {}".format(tif_forc_url))
                 logger.info("download_moddrfs: downloading to {}".format(tif_forc_path))
                 try:
-                    r = requests.get(tif_forc_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
+                    r = requests.get(tif_forc_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl), verify=cfg.ssl_verify)
                     if r.status_code == 200:
                         with open(tif_forc_path, 'wb') as rfile:
                             rfile.write(r.content)
@@ -1548,7 +1557,7 @@ def download_moddrfs(cfg, date_dn, overwrite_flag = False):
                     logger.info("download_moddrfs: downloading from {}".format(tif_grnsz_url))
                     logger.info("download_moddrfs: downloading to {}".format(tif_grnsz_path))
                     try:
-                        r = requests.get(tif_grnsz_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl))
+                        r = requests.get(tif_grnsz_url, auth = HTTPDigestAuth(cfg.username_jpl, cfg.password_jpl), verify=cfg.ssl_verify)
                         if r.status_code == 200:
                             with open(tif_grnsz_path, 'wb') as rfile:
                                 rfile.write(r.content)
@@ -1696,7 +1705,7 @@ def org_moddrfs(cfg, date_dn):
         file_meta = os.path.basename(tif).replace('.', '_').split('_')
         if 'poly' in cfg.output_type:
             try:
-                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['median', 'mean'])
+                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['median', 'mean'], all_touched=True)
                 tif_stats_df = pd.DataFrame(tif_stats)
                 logger.info("org_moddrfs: computing zonal statistics")
             except:
@@ -1729,7 +1738,7 @@ def org_moddrfs(cfg, date_dn):
 
         if 'points' in cfg.output_type:
             try:
-                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['median', 'mean'])
+                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['median', 'mean'], all_touched=True)
                 tif_stats_df = pd.DataFrame(tif_stats)
                 logger.info("org_moddrfs: computing points zonal statistics")
             except:
@@ -3160,6 +3169,9 @@ def cmr_search(short_name, version, time_start, time_end,
         return urls
     except KeyboardInterrupt:
         quit()
+
+def str2bool(v):
+   return str(v).lower() in ("yes", "true", "t", "1")
 
 if __name__ == '__main__':
     args = parse_args()

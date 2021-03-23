@@ -420,3 +420,9 @@ testing/ndfd/ndfd_qpf_202103051700_202103071800_testbasin_EPSG
 testing/ndfd/ndfd_qpf_202103051700_202103080000_testbasin_EPSG
 testing/ndfd/ndfd_qpf_202103051700_202103080600_testbasin_EPSG
 resources/gis/WCAO_Durango_ManagedBasins_EPSG5070.zip
+resources/gis/Klamath_HRU_EPSG5070.shx
+resources/gis/Klamath_HRU_EPSG5070.shp
+resources/gis/Klamath_HRU_EPSG5070.qpj
+resources/gis/Klamath_HRU_EPSG5070.prj
+resources/gis/Klamath_HRU_EPSG5070.dbf
+config/shread_config_knfs.ini
