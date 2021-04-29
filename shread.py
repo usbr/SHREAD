@@ -180,6 +180,12 @@ def main(config_path, start_date, end_date, time_int, prod_str):
             #         org_modis(cfg, date_dn)
             #     except:
             #         logger.info("org_modis: error processing modis for '{}'".format(date_dn))
+    # swann
+    if 'swann' in prod_list:
+        try:
+            batch_swann(cfg, date_list, time_int)
+        except:
+            logger.info("batch_swann: error downloading swann")
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -581,8 +587,34 @@ class config_params:
                 logger.error("read_config: '{}' missing from [{}] section".format("ssl_verify", jpl_sec))
                 error_flag = True
 
-        if error_flag == True:
-            sys.exit()
+        # swann section
+        logger.info("[swann]")
+        if error_swann_sec_flag == False:
+            #- host_ua
+            try:
+                self.host_ua = config.get(swann_sec, "host_ua")
+                logger.info("read config: reading 'host_ua' {}".format(self.host_ua))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("host_ua", swann_sec))
+                error_flag = True
+
+            #- dir_ftp_swann_arc
+            try:
+                self.dir_ftp_swann_arc = config.get(swann_sec, "dir_ftp_swann_arc")
+                logger.info("read config: reading 'dir_ftp_swann_arc' {}".format(self.dir_ftp_swann_arc))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("dir_ftp_swann_arc", swann_sec))
+                error_flag = True
+
+            #- dir_ftp_swann_rt
+            try:
+                self.dir_ftp_swann_rt = config.get(swann_sec, "dir_ftp_swann_rt")
+                logger.info("read config: reading 'dir_ftp_swann_rt' {}".format(self.dir_ftp_swann_rt))
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("dir_ftp_swann_rt", swann_sec))
+                error_flag = True
+            if error_flag == True:
+                sys.exit()
 
     def proc_config(self):
         """Read and parse config file
@@ -1862,6 +1894,221 @@ def download_modis(cfg, date_dn):
                 raise
     else:
         logger.info("download_modis: no data found")
+
+def batch_swann(date_list, time_int):
+    """downloads and processes swann data
+    Parameters
+    ---------
+        date_list: list of datetime dates
+            dates to retrieve data
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    calls 'download_swann_arc', 'download_swann_rt', 'org_swann_arc',
+        and 'org_swann_rt'
+
+    """
+
+    # NSIDC short name for dataset
+    short_name = 'NSIDC-0719'
+
+    # look at data avaiable through NSIDC archive
+    params = {
+        'short_name': short_name
+    }
+
+    cmr_collections_url = 'https://cmr.earthdata.nasa.gov/search/collections.json'
+    response = requests.get(cmr_collections_url, params=params)
+    results = json.loads(response.content)
+
+    # start date of archive data
+    start_date_ds = dt.datetime.strptime([el['time_start'] for el in results['feed']['entry']][0][0:10], '%Y-%m-%d')
+
+    # end date of archive data
+    end_date_ds = dt.datetime.strptime([el['time_end'] for el in results['feed']['entry']][0][0:10], '%Y-%m-%d')
+
+    # build list of data available
+    date_list_ds = pd.date_range(start_date_ds, end_date_ds, freq=time_int).tolist()
+
+    # find dates requested avaiable in archive
+    date_list_arc = lint(date_list_ds, date_list)
+
+    # get unique years as data are stored as water year netCDF
+    year_list_arc = set([dt.datetime.strftime(i, "%Y") for i in date_list_arc])
+
+    # build pandas dataframe of dates, year, month, and wyear for proc netCDF
+    arc_dt = pd.DataFrame({'date':date_list_arc})
+    arc_dt['year'] = arc_dt['date'].dt.strftime('%Y')
+    arc_dt['month'] = arc_dt['date'].dt.strftime('%m')
+    arc_dt['wyear'] = arc_dt.apply(lambda x: assign_wy(x), axis=1)
+
+    # download archive netCDF data
+    for year_dn in year_list_arc:
+        error_flag = False
+        try:
+            download_swann_arc(cfg, year_dn)
+        except:
+            logger.info("download_swann_arc: error downloading swann` for '{}'".format(year_dn))
+            error_flag = True
+        if error_flag is False:
+            # build list of dates for netCDF file
+            date_list_nc = arc_dt[arc_dt.wyear == year_dn].date.to_numpy()
+            for date_dn in date_list_nc:
+                try:
+                    org_swann_arc(cfg, date_dn)
+                except:
+                    logger.info("org_swann_arc: error processing swann for '{}'".format(date_dn))
+
+    # find dates requested available in real-time
+    date_list_rt = ldif(date_list_ds, date_list)
+
+    # download real-time netCDF data
+    for date_dn in date_list_rt:
+        error_flag = False
+        try:
+            download_swann_rt(cfg, date_dn)
+        except:
+            logger.info("download_swann_rt: error downloading swann` for '{}'".format(date_dn))
+            error_flag = True
+        if error_flag is False:
+            try:
+                org_swann_rt(cfg, date_dn)
+            except:
+                logger.info("org_swann_rt: error processing swann for '{}'".format(date_dn))
+
+def download_swann_arc(cfg, year_dn, overwrite_flag = False):
+    """ Download SWANN snow data from NSIDC archive
+
+    Parameters
+    ---------
+        cfg ():
+            config_params Class object
+        year_dn: datetime
+            year format
+        overwrite_flag: boolean
+            True : overwrite existing files
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    called from 'batch_swann'
+
+    """
+
+    site_url = host_snodas + dir_ftp_swann_arc
+
+    nc_name = "4km_SWE_Depth_WY" + ("{}_v01.nc".format(year_dn))
+    nc_url = site_url + nc_name
+    dir_work_swann = dir_work + 'swann/'
+    nc_path = dir_work_swann + nc_name
+
+    if not os.path.isdir(dir_work):
+        os.makedirs(dir_work)
+
+    if not os.path.isdir(dir_work_swann):
+        os.makedirs(dir_work_swann)
+
+    if os.path.isfile(nc_path) and overwrite_flag:
+        os.remove(nc_path)
+        
+    if not os.path.isfile(nc_path):
+        logger.info("download_swann_arc: downloading {}".format(year_dn.strftime('%Y')))
+        logger.info("download_swann_arc: downloading from {}".format(nc_url))
+        logger.info("download_swann_arc: downloading to {}".format(nc_path))
+        try:
+            urllib.request.urlretrieve(nc_url, nc_path)
+        except IOError as e:
+            logger.error("download_swann_arc: error downloading {}".format(year_dn.strftime('%Y')))
+            logging.error(e)
+
+def org_swann_arc(cfg, date_dn):
+    """ Organize SWANN snow data from NSIDC archive
+
+    Parameters
+    ---------
+        cfg ():
+            config_params Class object
+        date_dn: datetime
+            '%Y-%m-%d' format
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    called from 'batch_swann'
+
+    """
+
+def download_swann_rt(cfg, year_dn):
+    """ Download SWANN snow data from UA real-time
+
+    Parameters
+    ---------
+        cfg ():
+            config_params Class object
+        year_dn: datetime
+            year format
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    called from 'batch_swann'
+
+    """
+
+    site_url = cfg.host_ua + cfg.dir_ftp_swann_rt
+
+    nc_name = "{}.nc".format(date_dn.strftime('%d'))
+    nc_url = site_url + '/DailyData/' + date_dn.strftime('%Y') + "/" \
+    + date_dn.strftime('%m') + nc_name
+    nc_path = cfg.dir_work + 'swann/' + nc_name
+
+    if not os.path.isdir(cfg.dir_work):
+        os.makedirs(cfg.dir_work)
+
+    if os.path.isfile(nc_path) and overwrite_flag:
+        os.remove(nc_path)
+    if not os.path.isfile(nc_path):
+        logger.info("download_swann_rt: downloading {}".format(date_dn.strftime('%Y-%m-%d')))
+        logger.info("download_swann_rt: downloading from {}".format(nc_url))
+        logger.info("download_swann_rt: downloading to {}".format(nc_path))
+        try:
+            urllib.request.urlretrieve(nc_url, nc_path)
+        except IOError as e:
+            logger.error("download_swann_rt: error downloading {}".format(date_dn.strftime('%Y-%m-%d')))
+            logging.error(e)
+
+def org_swann_arc(cfg, date_dn):
+    """ Organize SWANN snow data from UA real-time
+
+    Parameters
+    ---------
+        cfg ():
+            config_params Class object
+        date_dn: datetime
+            '%Y-%m-%d' format
+
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    called from 'batch_swann'
+
+    """
 
 def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
     """wrapper around gdalwarp for reprojecting rasters
@@ -3172,6 +3419,19 @@ def cmr_search(short_name, version, time_start, time_end,
 
 def str2bool(v):
    return str(v).lower() in ("yes", "true", "t", "1")
+
+def lint(lst1, lst2):
+    lst3 = [value for value in lst1 if value in lst2]
+    return lst3
+
+def ldif(li1, li2):
+    return (list(list(set(li1)-set(li2)) + list(set(li2)-set(li1))))
+
+def wyear(row):
+    if row.date.month>=10:
+        return(dt.datetime(row.date.year+1,1,1).year)
+    else:
+        return(dt.datetime(row.date.year,1,1).year)
 
 if __name__ == '__main__':
     args = parse_args()

@@ -426,3 +426,4 @@ resources/gis/Klamath_HRU_EPSG5070.qpj
 resources/gis/Klamath_HRU_EPSG5070.prj
 resources/gis/Klamath_HRU_EPSG5070.dbf
 config/shread_config_knfs.ini
+*.nc

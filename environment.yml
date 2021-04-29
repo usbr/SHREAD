@@ -1,4 +1,4 @@
-name: shread
+name: shread_dev
 channels:
   - conda-forge
   - defaults
@@ -14,3 +14,8 @@ dependencies:
   - lxml
   - rasterstats
   - rasterio
+  - jupyter
+  - tzlocal
+  - netcdf4
+  - xarray
+  - rioxarray
