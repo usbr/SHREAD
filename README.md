@@ -9,10 +9,11 @@ SHREAD, the Snow-Hydrology Repo for Evaluation, Analysis, and Decision-making, i
   * [NOHRSC Snow Reporters Snow Depth (SD) and SWE](https://www.nohrsc.noaa.gov/nsa/)
   * [JPL MODSCAG MODIS-Derived Fractional Snow-Covered Area (fSCA)](https://doi.org/10.1016/j.rse.2009.01.001)
   * [JPL MODDRFS MODIS-Derived Dust Radiative Forcing](https://doi.org/10.1029/2012GL052457)
-  
+  * [NASA MODIS Normalized Difference Snow Index (NDSI)](https://nsidc.org/sites/nsidc.org/files/files/MODIS-snow-user-guide-C6.pdf)
+  * [University of Arizona Snow Water Artificial Neural Network Modelling System (SWANN) SD and SWE](https://doi.org/10.5067/0GGPB220EX6A)
+
 Support for additional products is in development or planned, including -
   
-  * NASA MODIS Fractional Snow-Covered Area (fSCA)
   * USGS Landsat Fractional Snow-Covered Area (fSCA)
   * ESA Sentinel-3 Snow Products
   * Theia Sentinel-3 Snow Products
@@ -32,7 +33,7 @@ The easiest way to get started with SHREAD is to install Anaconda 3 and create a
 
 To use SHREAD call it from the command line. An example *config file* is provided in the repo and additional documentation on the code will be forthcoming.  
 
-    python shread.py -i [config_file] -s [%Y%m%d] -d [%Y%m%d] -t [D] -p [snodas,srpt,modscag]
+    python shread.py -i [config_file] -s [%Y%m%d] -d [%Y%m%d] -t [D] -p [snodas,srpt,modscag,modis,swann]
 
 ## Disclaimer
 The software as originally published constitutes a work of the United States Government and is not subject to domestic copyright protection under 17 USC ¤ 105. Subsequent contributions by members of the public, however, retain their original copyright.
