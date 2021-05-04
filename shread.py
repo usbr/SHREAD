@@ -42,6 +42,8 @@ import base64
 import itertools
 import ssl
 import pytz
+import xarray as xr
+import rioxarray
 from tzlocal import get_localzone
 
 from getpass import getpass
@@ -183,6 +185,7 @@ def main(config_path, start_date, end_date, time_int, prod_str):
     # swann
     if 'swann' in prod_list:
         try:
+
             batch_swann(cfg, date_list, time_int)
         except:
             logger.info("batch_swann: error downloading swann")
@@ -252,7 +255,7 @@ class config_params:
         error_modis_sec_flag = False
         error_nohrsc_sec_flag = False
         error_jpl_sec_flag = False
-
+        error_swann_sec_flag = False
         try:
             config.read_file(open(config_path))
             logger.info("read_config: reading config file '{}'".format(config_path))
@@ -268,7 +271,7 @@ class config_params:
         modis_sec = "modis"
         nohrsc_sec = "nohrsc"
         jpl_sec = "jpl"
-
+        swann_sec = "swann"
         # ADD SECTIONS AS NEW SNOW PRODUCTS ARE ADDED
 
         cfg_secs = config.sections()
@@ -677,13 +680,17 @@ def download_snodas(cfg, date_dn, overwrite_flag = False):
 
     """
     site_url = cfg.host_snodas + cfg.dir_ftp_snodas
+    dir_work_snodas = cfg.dir_work + 'snodas/'
     zip_name = "SNODAS_" + ("{}.tar".format(date_dn.strftime('%Y%m%d')))
     zip_url = site_url + date_dn.strftime('%Y') + "/" + date_dn.strftime('%m') + "_" \
     + date_dn.strftime('%b') + '/' + zip_name
-    zip_path = cfg.dir_work + 'snodas/' + zip_name
+    zip_path = dir_work_snodas + zip_name
 
     if not os.path.isdir(cfg.dir_work):
         os.makedirs(cfg.dir_work)
+
+    if not os.path.isdir(dir_work_snodas):
+        os.makedirs(dir_work_snodas)
 
     if os.path.isfile(zip_path) and overwrite_flag:
         os.remove(zip_path)
@@ -1895,7 +1902,7 @@ def download_modis(cfg, date_dn):
     else:
         logger.info("download_modis: no data found")
 
-def batch_swann(date_list, time_int):
+def batch_swann(cfg, date_list, time_int):
     """downloads and processes swann data
     Parameters
     ---------
@@ -1908,8 +1915,10 @@ def batch_swann(date_list, time_int):
 
     Notes
     -----
-    calls 'download_swann_arc', 'download_swann_rt', 'org_swann_arc',
-        and 'org_swann_rt'
+    calls 'download_swann_arc', 'download_swann_rt', 'org_swann'
+
+    hard-coded parameters found from this reference -
+        https://nsidc.org/data/nsidc-0719/versions/1
 
     """
 
@@ -1924,7 +1933,6 @@ def batch_swann(date_list, time_int):
     cmr_collections_url = 'https://cmr.earthdata.nasa.gov/search/collections.json'
     response = requests.get(cmr_collections_url, params=params)
     results = json.loads(response.content)
-
     # start date of archive data
     start_date_ds = dt.datetime.strptime([el['time_start'] for el in results['feed']['entry']][0][0:10], '%Y-%m-%d')
 
@@ -1944,7 +1952,7 @@ def batch_swann(date_list, time_int):
     arc_dt = pd.DataFrame({'date':date_list_arc})
     arc_dt['year'] = arc_dt['date'].dt.strftime('%Y')
     arc_dt['month'] = arc_dt['date'].dt.strftime('%m')
-    arc_dt['wyear'] = arc_dt.apply(lambda x: assign_wy(x), axis=1)
+    arc_dt['wyear'] = arc_dt.apply(lambda x: wyear_pd(x), axis=1)
 
     # download archive netCDF data
     for year_dn in year_list_arc:
@@ -1952,19 +1960,20 @@ def batch_swann(date_list, time_int):
         try:
             download_swann_arc(cfg, year_dn)
         except:
-            logger.info("download_swann_arc: error downloading swann` for '{}'".format(year_dn))
+            logger.info("download_swann_arc: error downloading swann for '{}'".format(year_dn))
             error_flag = True
         if error_flag is False:
             # build list of dates for netCDF file
-            date_list_nc = arc_dt[arc_dt.wyear == year_dn].date.to_numpy()
+            date_list_nc = pd.to_datetime(arc_dt[arc_dt.wyear == int(year_dn)].date.to_numpy())
+
             for date_dn in date_list_nc:
                 try:
-                    org_swann_arc(cfg, date_dn)
+                    org_swann(cfg, date_dn, ftype = 'arc')
                 except:
-                    logger.info("org_swann_arc: error processing swann for '{}'".format(date_dn))
+                    logger.info("org_swann: error processing swann for '{}'".format(date_dn))
 
     # find dates requested available in real-time
-    date_list_rt = ldif(date_list_ds, date_list)
+    date_list_rt = ldif(date_list_arc, date_list)
 
     # download real-time netCDF data
     for date_dn in date_list_rt:
@@ -1976,9 +1985,9 @@ def batch_swann(date_list, time_int):
             error_flag = True
         if error_flag is False:
             try:
-                org_swann_rt(cfg, date_dn)
+                org_swann(cfg, date_dn, ftype = 'rt')
             except:
-                logger.info("org_swann_rt: error processing swann for '{}'".format(date_dn))
+                logger.info("org_swann: error processing swann for '{}'".format(date_dn))
 
 def download_swann_arc(cfg, year_dn, overwrite_flag = False):
     """ Download SWANN snow data from NSIDC archive
@@ -2002,34 +2011,34 @@ def download_swann_arc(cfg, year_dn, overwrite_flag = False):
 
     """
 
-    site_url = host_snodas + dir_ftp_swann_arc
+    site_url = cfg.host_snodas + cfg.dir_ftp_swann_arc
 
     nc_name = "4km_SWE_Depth_WY" + ("{}_v01.nc".format(year_dn))
     nc_url = site_url + nc_name
-    dir_work_swann = dir_work + 'swann/'
+    dir_work_swann = cfg.dir_work + 'swann/'
     nc_path = dir_work_swann + nc_name
 
-    if not os.path.isdir(dir_work):
-        os.makedirs(dir_work)
+    if not os.path.isdir(cfg.dir_work):
+        os.makedirs(cfg.dir_work)
 
     if not os.path.isdir(dir_work_swann):
         os.makedirs(dir_work_swann)
 
     if os.path.isfile(nc_path) and overwrite_flag:
         os.remove(nc_path)
-        
+
     if not os.path.isfile(nc_path):
-        logger.info("download_swann_arc: downloading {}".format(year_dn.strftime('%Y')))
+        logger.info("download_swann_arc: downloading {}".format(year_dn))
         logger.info("download_swann_arc: downloading from {}".format(nc_url))
         logger.info("download_swann_arc: downloading to {}".format(nc_path))
         try:
             urllib.request.urlretrieve(nc_url, nc_path)
         except IOError as e:
-            logger.error("download_swann_arc: error downloading {}".format(year_dn.strftime('%Y')))
+            logger.error("download_swann_arc: error downloading {}".format(year_dn))
             logging.error(e)
 
-def org_swann_arc(cfg, date_dn):
-    """ Organize SWANN snow data from NSIDC archive
+def org_swann(cfg, date_dn, ftype):
+    """ Organize SWANN snow data
 
     Parameters
     ---------
@@ -2037,7 +2046,9 @@ def org_swann_arc(cfg, date_dn):
             config_params Class object
         date_dn: datetime
             '%Y-%m-%d' format
-
+        ftype: string
+            arc: archive data file
+            rt: real-time data file
     Returns
     -------
         None
@@ -2047,6 +2058,189 @@ def org_swann_arc(cfg, date_dn):
     called from 'batch_swann'
 
     """
+
+    year_dn = wyear_dt(date_dn)
+    dir_work_swann = cfg.dir_work + 'swann/'
+    if ftype == 'arc':
+        nc_name = "4km_SWE_Depth_WY" + ("{}_v01.nc".format(year_dn))
+    elif ftype == 'rt':
+        nc_name = "4km_SWE_Depth_" + ("{}_v01.nc".format(date_dn.strftime('%Y%m%d')))
+    else:
+        logger.error("org_swann: invalid type {}".format(type))
+
+    nc_path = dir_work_swann + nc_name
+
+    date_str = str(date_dn.strftime('%Y%m%d'))
+    chr_rm = [":"]
+    proj_str = ''.join(i for i in cfg.proj if not i in chr_rm)
+    dtype_out = 'float64'
+    basin_str = os.path.splitext(os.path.basename(cfg.basin_poly_path))[0]
+    crs_raw = 'EPSG:4326'
+
+    # open dataset with xarray
+    with xr.open_dataset(nc_path) as file_nc:
+        # set coordinate system to 'WGS84 (EPSG:4326)'
+        swann_xr = file_nc.rio.write_crs(4326, inplace=True)
+    file_nc.close()
+
+    # extract swe data for 'date_dn' and save as geotif
+    swe_swann_xr = swann_xr["SWE"].sel(
+        time=np.datetime64(date_dn))
+    swe_swann_xr_date_dn = swe_swann_xr.rio.set_spatial_dims(x_dim='lon', y_dim='lat', inplace=True)
+
+    swe_file_path = dir_work_swann + 'swann_swe_' + date_str + '.tif'
+    swe_swann_xr_date_dn.rio.to_raster(swe_file_path)
+
+    # extract snow depth data for 'date_dn' and save as geotif
+    sd_swann_xr = swann_xr["DEPTH"].sel(
+        time=np.datetime64(date_dn))
+    sd_swann_xr_date_dn = swe_swann_xr.rio.set_spatial_dims(x_dim='lon', y_dim='lat', inplace=True)
+
+    sd_file_path = dir_work_swann + 'swann_sd_' + date_str + '.tif'
+    sd_swann_xr_date_dn.rio.to_raster(sd_file_path)
+
+    # close xr dataset
+    swann_xr.close()
+
+    # reproject geotif
+    tif_list = glob.glob("{0}/*{1}*.tif".format(dir_work_swann, date_str))
+    for tif in tif_list:
+        tif_out = os.path.splitext(tif)[0] + "_" + proj_str + ".tif"
+        try:
+            gdal_raster_reproject(tif, tif_out, cfg.proj, crs_raw)
+            # rasterio_raster_reproject(tif, tif_out, cfg.proj)
+            logger.info("org_swann: reprojecting {} to {}".format(tif, tif_out))
+        except:
+            logger.error("org_swann: error reprojecting {} to {}".format(tif, tif_out))
+    if not tif_list:
+        logger.error("org_swann: error finding tifs to reproject")
+
+    # clip to basin polygon
+    tif_list = glob.glob("{0}/*{1}*{2}.tif".format(dir_work_swann, date_str, proj_str))
+    for tif in tif_list:
+        tif_out = os.path.splitext(tif)[0] + "_" + basin_str + ".tif"
+        try:
+            gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, cfg.proj, cfg.proj, -9999)
+            logger.info("org_swann: clipping {} to {}".format(tif, tif_out))
+        except:
+            logger.error("org_swann: error clipping {} to {}".format(tif, tif_out))
+    if not tif_list:
+        logger.error("org_swann: error finding tifs to clip")
+
+    # convert units
+    if cfg.unit_sys == 'english':
+        calc_exp = '(+ 1 (* .0393701 (read 1)))' # inches
+    if cfg.unit_sys == 'metric':
+        calc_exp = '(read 1)' # keep units in mm
+    # SWE
+    tif_list = glob.glob("{0}/*{1}*{2}*{3}*{4}.tif".format(dir_work_swann, 'swann_swe', date_str, proj_str, basin_str))
+
+    for tif in tif_list:
+        tif_int = os.path.splitext(tif)[0] + "_" + dtype_out + ".tif"
+        tif_out = cfg.dir_db + "swann_swe_" + date_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
+        try:
+            rio_dtype_conversion(tif, tif_int, dtype_out)
+            rio_calc(tif_int, tif_out, calc_exp)
+            logger.info("org_swann: calc {} {} to {}".format(calc_exp, tif, tif_out))
+        except:
+            logger.error("org_swann: error calc {} to {}".format(tif, tif_out))
+    if not tif_list:
+        logger.error("org_swann: error finding tifs to calc")
+
+    # Snow Depth
+    tif_list = glob.glob("{0}/*{1}*{2}*{3}*{4}.tif".format(dir_work_swann, 'swann_sd', date_str, proj_str, basin_str))
+
+    for tif in tif_list:
+        tif_int = os.path.splitext(tif)[0] + "_" + dtype_out + ".tif"
+        tif_out = cfg.dir_db + "swann_snowdepth_" + date_str + "_" + basin_str + "_" + cfg.unit_sys + ".tif"
+        try:
+            rio_dtype_conversion(tif, tif_int, dtype_out)
+            rio_calc(tif_int, tif_out, calc_exp)
+            logger.info("org_swann: calc {} {} to {}".format(calc_exp, tif, tif_out))
+        except:
+            logger.error("org_swann: error calc {} to {}".format(tif, tif_out))
+    if not tif_list:
+        logger.error("org_swann: error finding tifs to calc")
+
+    # calculate zonal statistics and export data
+    tif_list = glob.glob("{0}/{1}*{2}*{3}*{4}.tif".format(cfg.dir_db, 'swann', date_str, basin_str, cfg.unit_sys))
+
+    for tif in tif_list:
+        file_meta = os.path.basename(tif).replace('.', '_').split('_')
+
+        if 'poly' in cfg.output_type:
+            try:
+                tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['min', 'max', 'median', 'mean'], all_touched=True)
+                tif_stats_df = pd.DataFrame(tif_stats)
+                logger.info("org_swann: computing zonal statistics")
+            except:
+                logger.error("org_swann: error computing poly zonal statistics")
+            try:
+                frames = [cfg.basin_poly, tif_stats_df]
+                basin_poly_stats = pd.concat(frames, axis=1)
+                logger.info("org_swann: merging poly zonal statistics")
+            except:
+                logger.error("org_swann: error merging zonal statistics")
+
+            if 'geojson' in cfg.output_format:
+                try:
+                    geojson_out = os.path.splitext(tif)[0] + "_poly.geojson"
+                    basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                    logger.info("org_swann: writing {0}".format(geojson_out))
+                except:
+                    logger.error("org_swann: error writing {0}".format(geojson_out))
+            if 'csv' in cfg.output_format:
+                try:
+                    csv_out = os.path.splitext(tif)[0] + "_poly.csv"
+                    basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                    basin_poly_stats_df.insert(0, 'Source', file_meta[0])
+                    basin_poly_stats_df.insert(0, 'Type', file_meta[1])
+                    basin_poly_stats_df.insert(0, 'Date', dt.datetime.strptime(file_meta[2], '%Y%m%d').strftime('%Y-%m-%d %H:%M'))
+                    basin_poly_stats_df.to_csv(csv_out, index=False)
+                    logger.info("org_swann: writing {0}".format(csv_out))
+                except:
+                    logger.error("org_swann: error writing {0}".format(csv_out))
+
+        if 'points' in cfg.output_type:
+            try:
+                tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['min', 'max', 'median', 'mean'], all_touched=True)
+                tif_stats_df = pd.DataFrame(tif_stats)
+                logger.info("org_swann: computing points zonal statistics")
+            except:
+                logger.error("org_swann: error computing points zonal statistics")
+            try:
+                frames = [cfg.basin_points, tif_stats_df]
+                basin_points_stats = pd.concat(frames, axis=1)
+                logger.info("org_swann: merging zonal statistics")
+            except:
+                logger.error("org_swann: error merging zonal statistics")
+            if 'geojson' in cfg.output_format:
+                try:
+                    geojson_out = os.path.splitext(tif)[0] + "_points.geojson"
+                    basin_points_stats.to_file(geojson_out, driver='GeoJSON')
+                    logger.info("org_swann: writing {0}".format(geojson_out))
+                except:
+                    logger.error("org_swann: error writing {0}".format(geojson_out))
+            if 'csv' in cfg.output_format:
+                try:
+                    csv_out = os.path.splitext(tif)[0] + "_points.csv"
+                    basin_points_stats_df = pd.DataFrame(basin_points_stats.drop(columns = 'geometry'))
+                    basin_points_stats_df.insert(0, 'Source', file_meta[0])
+                    basin_points_stats_df.insert(0, 'Type', file_meta[1])
+                    basin_points_stats_df.insert(0, 'Date', dt.datetime.strptime(file_meta[2], '%Y%m%d').strftime('%Y-%m-%d %H:%M'))
+                    basin_points_stats_df.to_csv(csv_out, index=False)
+                    logger.info("org_swann: writing {0}".format(csv_out, index=False))
+                except:
+                    logger.error("org_swann: error writing {0}".format(csv_out))
+
+    # clean up working directory
+    for file in os.listdir(dir_work_swann):
+        file_path = dir_work_swann + file
+        try:
+            os.remove(file_path)
+            logger.info("org_swann: removing {}".format(file_path))
+        except:
+            logger.error("org_swann: error removing {}".format(file_path))
 
 def download_swann_rt(cfg, year_dn):
     """ Download SWANN snow data from UA real-time
@@ -2067,13 +2261,14 @@ def download_swann_rt(cfg, year_dn):
     called from 'batch_swann'
 
     """
+    date_str = str(date_dn.strftime('%Y%m%d'))
 
     site_url = cfg.host_ua + cfg.dir_ftp_swann_rt
 
     nc_name = "{}.nc".format(date_dn.strftime('%d'))
-    nc_url = site_url + '/DailyData/' + date_dn.strftime('%Y') + "/" \
-    + date_dn.strftime('%m') + nc_name
-    nc_path = cfg.dir_work + 'swann/' + nc_name
+    nc_url = site_url + date_dn.strftime('%Y') + "/" \
+    + date_dn.strftime('%m')+ "/" + nc_name
+    nc_path = cfg.dir_work + 'swann/' + '4km_SWE_Depth_' + date_str + '_v01.nc'
 
     if not os.path.isdir(cfg.dir_work):
         os.makedirs(cfg.dir_work)
@@ -2089,26 +2284,6 @@ def download_swann_rt(cfg, year_dn):
         except IOError as e:
             logger.error("download_swann_rt: error downloading {}".format(date_dn.strftime('%Y-%m-%d')))
             logging.error(e)
-
-def org_swann_arc(cfg, date_dn):
-    """ Organize SWANN snow data from UA real-time
-
-    Parameters
-    ---------
-        cfg ():
-            config_params Class object
-        date_dn: datetime
-            '%Y-%m-%d' format
-
-    Returns
-    -------
-        None
-
-    Notes
-    -----
-    called from 'batch_swann'
-
-    """
 
 def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
     """wrapper around gdalwarp for reprojecting rasters
@@ -3418,7 +3593,7 @@ def cmr_search(short_name, version, time_start, time_end,
         quit()
 
 def str2bool(v):
-   return str(v).lower() in ("yes", "true", "t", "1")
+    return str(v).lower() in ("yes", "true", "t", "1")
 
 def lint(lst1, lst2):
     lst3 = [value for value in lst1 if value in lst2]
@@ -3427,11 +3602,19 @@ def lint(lst1, lst2):
 def ldif(li1, li2):
     return (list(list(set(li1)-set(li2)) + list(set(li2)-set(li1))))
 
-def wyear(row):
+def wyear_pd(row):
     if row.date.month>=10:
         return(dt.datetime(row.date.year+1,1,1).year)
     else:
         return(dt.datetime(row.date.year,1,1).year)
+
+def wyear_dt(date):
+    month = int(dt.datetime.strftime(date, '%m'))
+    year = int(dt.datetime.strftime(date, '%Y'))
+    if month>=10:
+        return(year+1)
+    else:
+        return(year)
 
 if __name__ == '__main__':
     args = parse_args()
