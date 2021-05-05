@@ -19,6 +19,8 @@ Support for additional products is in development or planned, including -
   * Theia Sentinel-3 Snow Products
   * NOHRSC National Snow Analysis Snowfall Depth
 
+Some data products require accounts and login information (username and password) to be set in the config file. These include the JPL MODSCAG and MODDRFS products; contact JPL for account creation, and MODIS NDSI which requires an [Earthdata account](https://urs.earthdata.nasa.gov/users/new)
+
 ## Requirements
 * Python 3.X (currently tested using Python 3.8)
 * Libraries listed in the *environment.yml* file
