@@ -192,20 +192,17 @@ def main(config_path, start_date, end_date, time_int, prod_str):
         except:
             logger.info("batch_swann: error downloading swann")
 
-    # ndfd - REFINE CODE BELOW WITH NDFD VAR NAMES
+    # ndfd
     if 'ndfd' in prod_list:
         for date_dn in date_list:
             error_flag = False
-            try:
-                download_ndfd(cfg, date_dn)
-            except:
-                logger.info("download_ndfd: error downloading ndfd for '{}'".format(date_dn))
-                error_flag = True
-            if error_flag is False:
+            for param in cfg.ndfd_parameters:
                 try:
-                    org_ndfd(cfg, date_dn)
+                    # forecast length hard-coded to 7 for now
+                    download_ndfd(param, flen=7, cfg.proj, overwrite_flag=False)
                 except:
-                    logger.info("org_ndfd: error processing moddrfs for '{}'".format(date_dn))
+                    logger.info("download_ndfd: error downloading ndfd {} for '{}'".format(param, date_dn))
+                    error_flag = True
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -623,6 +620,7 @@ class config_params:
             #- ndfd_parameters
             try:
                 self.ndfd_parameters = config.get(noaa_sec, "ndfd_parameters")
+                self.ndfd_parameters = self.ndfd_parameters.split(',')
                 logger.info("read_config")
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("ndfd_parameters", noaa_sec))
