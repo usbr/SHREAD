@@ -194,15 +194,23 @@ def main(config_path, start_date, end_date, time_int, prod_str):
 
     # ndfd
     if 'ndfd' in prod_list:
+        import_flag = True
         for date_dn in date_list:
+            print(date_dn)
             error_flag = False
-            for param in cfg.ndfd_parameters:
-                try:
-                    # forecast length hard-coded to 7 for now
-                    download_ndfd(param, flen=7, cfg.proj, overwrite_flag=False)
-                except:
-                    logger.info("download_ndfd: error downloading ndfd {} for '{}'".format(param, date_dn))
-                    error_flag = True
+            if import_flag:
+                for param in cfg.ndfd_parameters:
+                    print(f"trying {param}")
+                    try:
+                        # forecast length hard-coded to 3 for now # TJC changed from 7 to 3.
+                        download_ndfd(parameter=param,flen=3,crs_out=cfg.proj,cfg=cfg,overwrite_flag=False)
+                    except:
+                        logger.info("download_ndfd: error downloading ndfd {} for '{}'".format(param, date_dn))
+                        error_flag = True
+                        print("fail!")
+                    import_flag = False
+            else:
+                print("Importing ndfd only once...skipping")
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -2321,7 +2329,7 @@ def download_swann_rt(cfg, year_dn):
             logger.error("download_swann_rt: error downloading {}".format(date_dn.strftime('%Y-%m-%d')))
             logging.error(e)
 
-def download_ndfd(parameter, flen, crs_out, overwrite_flag=False):
+def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
     """download and format national digital forecast data
     Parameters
     ---------
@@ -2347,10 +2355,11 @@ def download_ndfd(parameter, flen, crs_out, overwrite_flag=False):
     """
 
     dir_work_ndfd = cfg.dir_work + 'ndfd/'
-
+    
     # create working directory if it doesn't exist
-    if not os.path.isdir(dir_work_ndfd):
-        os.makedirs(dir_work_ndfd)
+    if os.path.isdir(dir_work_ndfd)==False:
+        print(dir_work_ndfd)
+        os.mkdir(dir_work_ndfd)
     basin_str = os.path.splitext(os.path.basename(cfg.basin_poly_path))[0]
     chr_rm = [":"]
     proj_str = ''.join(i for i in crs_out if not i in chr_rm)
@@ -2368,6 +2377,7 @@ def download_ndfd(parameter, flen, crs_out, overwrite_flag=False):
         iflen = 2
     else:
         error('flen must be between 1 and 7')
+    print(iflen)
 
     # qpf only available for 1-3 days
     if parameter == 'qpf'or parameter == 'snow':
