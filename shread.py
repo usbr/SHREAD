@@ -2457,11 +2457,23 @@ def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
         tif_list = glob.glob("{0}/*{1}*{2}*{3}*.tif".format(dir_work_ndfd, 'ndfd', parameter, date_init_str))
         ct_flag = False
         # mm to inches conversion
-        if parameter == 'pop12' or parameter == 'snow':
+        if parameter == 'snow':
             if cfg.unit_sys == 'english':
-                calc_exp = '(+ 1 (* .0393701 (read 1)))' # inches
+                calc_exp = '(+ 1 (* 39.3701 (read 1)))' # inches
             if cfg.unit_sys == 'metric':
-                calc_exp = '(read 1)' # keep units in mm
+                calc_exp = '(+ 1 (/ 1000 (read 1)))' # mm
+				
+        if parameter == "qpf":
+            if cfg.unit_sys == 'english':
+                calc_exp = '(+ 1 (* 0.04 (read 1)))' # convert from kg/m2 to inches of water
+            if cfg.unit_sys == 'metric':
+                calc_exp = '(read 1)' # keep units in percentage
+                
+        if (parameter == 'pop12') or (parameter == "sky") or (parameter == "rhm"):
+            if cfg.unit_sys == 'english':
+                calc_exp = '(read 1)' # keep units in percentage
+            if cfg.unit_sys == 'metric':
+                calc_exp = '(read 1)' # keep units in percentage
 
         # c to f conversion
         if parameter == 'mint' or parameter == 'maxt':
