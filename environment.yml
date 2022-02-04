@@ -1,4 +1,4 @@
-name: shread
+name: shread2
 channels:
   - conda-forge
   - defaults
@@ -20,3 +20,4 @@ dependencies:
   - xarray
   - rioxarray
   - pygrib
+  - joblib

@@ -47,6 +47,7 @@ import rioxarray
 from tzlocal import get_localzone
 import pygrib
 import shutil
+from joblib import Parallel,delayed
 
 from getpass import getpass
 try:
@@ -114,19 +115,26 @@ def main(config_path, start_date, end_date, time_int, prod_str):
     # download data
 
     # snodas
-    if 'snodas' in prod_list:
-        for date_dn in date_list:
-            error_flag = False
+    
+     # snodas function
+    def snodas_func(date_dn,cfg=cfg,logger=logger):
+        error_flag = False
+        print(f"trying {date_dn}")
+        try:
+            download_snodas(cfg, date_dn)
+        except:
+            logger.info("download_ndfd: error downloading ndfd {} for '{}'".format(parameter))
+            error_flag = True
+            print("fail!")
+        if error_flag is False:
             try:
-                download_snodas(cfg, date_dn)
+                org_snodas(cfg, date_dn)
             except:
-                logger.info("download_snodas: error downloading srpt for '{}'".format(date_dn))
-                error_flag = True
-            if error_flag is False:
-                try:
-                    org_snodas(cfg, date_dn)
-                except:
-                    logger.info("org_snodas: error processing snodas for '{}'".format(date_dn))
+                logger.info("org_snodas: error processing snodas for '{}'".format(date_dn))
+
+    if 'snodas' in prod_list:
+        Parallel(n_jobs=6)(delayed(snodas_func)(d) for d in date_list)
+
     # srpt
     if 'srpt' in prod_list:
         for date_dn in date_list:
@@ -193,22 +201,28 @@ def main(config_path, start_date, end_date, time_int, prod_str):
             logger.info("batch_swann: error downloading swann")
 
     # ndfd
+    
+    # ndfd function
+    def ndfd_func(parameter,flen=3,crs_out=cfg.proj,cfg=cfg,overwrite_flag=False,logger=logger):
+
+        print(f"trying {parameter}")
+        try:
+            # forecast length hard-coded to 3 for now # TJC changed from 7 to 3.
+            download_ndfd(parameter,flen,crs_out,cfg,overwrite_flag=False)
+        except:
+            logger.info("download_ndfd: error downloading ndfd {} for '{}'".format(parameter))
+            error_flag = True
+            print("fail!")
+
+    
     if 'ndfd' in prod_list:
         import_flag = True
         for date_dn in date_list:
             print(date_dn)
             error_flag = False
             if import_flag:
-                for param in cfg.ndfd_parameters:
-                    print(f"trying {param}")
-                    try:
-                        # forecast length hard-coded to 3 for now # TJC changed from 7 to 3.
-                        download_ndfd(parameter=param,flen=3,crs_out=cfg.proj,cfg=cfg,overwrite_flag=False)
-                    except:
-                        logger.info("download_ndfd: error downloading ndfd {} for '{}'".format(param, date_dn))
-                        error_flag = True
-                        print("fail!")
-                    import_flag = False
+                Parallel(n_jobs=6)(delayed(ndfd_func)(p) for p in cfg.ndfd_parameters)
+                import_flag = False
             else:
                 print("Importing ndfd only once...skipping")
 
@@ -2329,6 +2343,7 @@ def download_swann_rt(cfg, year_dn):
             logger.error("download_swann_rt: error downloading {}".format(date_dn.strftime('%Y-%m-%d')))
             logging.error(e)
 
+
 def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
     """download and format national digital forecast data
     Parameters
@@ -2462,10 +2477,10 @@ def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
                 calc_exp = '(+ 1 (* 39.3701 (read 1)))' # inches
             if cfg.unit_sys == 'metric':
                 calc_exp = '(+ 1 (/ 1000 (read 1)))' # mm
-				
+                
         if parameter == "qpf":
             if cfg.unit_sys == 'english':
-                calc_exp = '(+ 1 (* 0.04 (read 1)))' # convert from kg/m2 to inches of water
+                calc_exp = '(+ 0.04 (* 0.04 (read 1)))' # convert from kg/m2 to inches of water
             if cfg.unit_sys == 'metric':
                 calc_exp = '(read 1)' # keep units in percentage
                 
