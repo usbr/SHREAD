@@ -1,4 +1,4 @@
-name: shread2
+name: shread
 channels:
   - conda-forge
   - defaults
