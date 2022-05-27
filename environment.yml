@@ -19,3 +19,5 @@ dependencies:
   - netcdf4
   - xarray
   - rioxarray
+  - pygrib
+  - joblib

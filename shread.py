@@ -45,6 +45,9 @@ import pytz
 import xarray as xr
 import rioxarray
 from tzlocal import get_localzone
+import pygrib
+import shutil
+from joblib import Parallel,delayed
 
 from getpass import getpass
 try:
@@ -112,19 +115,26 @@ def main(config_path, start_date, end_date, time_int, prod_str):
     # download data
 
     # snodas
-    if 'snodas' in prod_list:
-        for date_dn in date_list:
-            error_flag = False
+    
+     # snodas function
+    def snodas_func(date_dn,cfg=cfg,logger=logger):
+        error_flag = False
+        print(f"trying {date_dn}")
+        try:
+            download_snodas(cfg, date_dn)
+        except:
+            logger.info("download_ndfd: error downloading ndfd {} for '{}'".format(parameter))
+            error_flag = True
+            print("fail!")
+        if error_flag is False:
             try:
-                download_snodas(cfg, date_dn)
+                org_snodas(cfg, date_dn)
             except:
-                logger.info("download_snodas: error downloading srpt for '{}'".format(date_dn))
-                error_flag = True
-            if error_flag is False:
-                try:
-                    org_snodas(cfg, date_dn)
-                except:
-                    logger.info("org_snodas: error processing snodas for '{}'".format(date_dn))
+                logger.info("org_snodas: error processing snodas for '{}'".format(date_dn))
+
+    if 'snodas' in prod_list:
+        Parallel(n_jobs=6)(delayed(snodas_func)(d) for d in date_list)
+
     # srpt
     if 'srpt' in prod_list:
         for date_dn in date_list:
@@ -168,6 +178,7 @@ def main(config_path, start_date, end_date, time_int, prod_str):
                     org_moddrfs(cfg, date_dn)
                 except:
                     logger.info("org_moddrfs: error processing moddrfs for '{}'".format(date_dn))
+
     # modis
     if 'modis' in prod_list:
         for date_dn in date_list:
@@ -185,10 +196,35 @@ def main(config_path, start_date, end_date, time_int, prod_str):
     # swann
     if 'swann' in prod_list:
         try:
-
             batch_swann(cfg, date_list, time_int)
         except:
             logger.info("batch_swann: error downloading swann")
+
+    # ndfd
+    
+    # ndfd function
+    def ndfd_func(parameter,flen=3,crs_out=cfg.proj,cfg=cfg,overwrite_flag=False,logger=logger):
+
+        print(f"trying {parameter}")
+        try:
+            # forecast length hard-coded to 3 for now # TJC changed from 7 to 3.
+            download_ndfd(parameter,flen,crs_out,cfg,overwrite_flag=False)
+        except:
+            logger.info("download_ndfd: error downloading ndfd {} for '{}'".format(parameter))
+            error_flag = True
+            print("fail!")
+
+    
+    if 'ndfd' in prod_list:
+        import_flag = True
+        for date_dn in date_list:
+            print(date_dn)
+            error_flag = False
+            if import_flag:
+                Parallel(n_jobs=6)(delayed(ndfd_func)(p) for p in cfg.ndfd_parameters)
+                import_flag = False
+            else:
+                print("Importing ndfd only once...skipping")
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -256,6 +292,7 @@ class config_params:
         error_nohrsc_sec_flag = False
         error_jpl_sec_flag = False
         error_swann_sec_flag = False
+        error_noaa_sec_flag = False
         try:
             config.read_file(open(config_path))
             logger.info("read_config: reading config file '{}'".format(config_path))
@@ -271,6 +308,7 @@ class config_params:
         modis_sec = "modis"
         nohrsc_sec = "nohrsc"
         jpl_sec = "jpl"
+        noaa_sec = "noaa"
         swann_sec = "swann"
         # ADD SECTIONS AS NEW SNOW PRODUCTS ARE ADDED
 
@@ -588,6 +626,26 @@ class config_params:
                 logger.info("read config: reading 'ssl_verify' {}".format(self.ssl_verify))
             except:
                 logger.error("read_config: '{}' missing from [{}] section".format("ssl_verify", jpl_sec))
+                error_flag = True
+
+        # noaa section
+        logger.info("[noaa]")
+        if error_noaa_sec_flag == False:
+
+            #- host_noaa
+            try:
+                self.host_ndfd = config.get(noaa_sec, "host_ndfd")
+                logger.info("read_config")
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("host_ndfd", noaa_sec))
+                error_flag = True
+            #- ndfd_parameters
+            try:
+                self.ndfd_parameters = config.get(noaa_sec, "ndfd_parameters")
+                self.ndfd_parameters = self.ndfd_parameters.split(',')
+                logger.info("read_config")
+            except:
+                logger.error("read_config: '{}' missing from [{}] section".format("ndfd_parameters", noaa_sec))
                 error_flag = True
 
         # swann section
@@ -2284,6 +2342,276 @@ def download_swann_rt(cfg, year_dn):
         except IOError as e:
             logger.error("download_swann_rt: error downloading {}".format(date_dn.strftime('%Y-%m-%d')))
             logging.error(e)
+
+
+def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
+    """download and format national digital forecast data
+    Parameters
+    ---------
+        parameter: string
+            ndfd parameter -
+            https://www.nws.noaa.gov/xml/docs/elementInputNames.php
+        flen: integer
+            forecast length in days
+                Default - 7
+                values from 1 to 7 are valid
+        crs_out: string
+            EPSG spatial reference for output raster coordinate system in
+                'EPSG:X' format
+        overwrite_flag: boolean
+    Returns
+    -------
+        None
+
+    Notes
+    -----
+    function can only download latest forecast
+    only valid right now for CONUS
+    """
+
+    dir_work_ndfd = cfg.dir_work + 'ndfd/'
+    
+    # create working directory if it doesn't exist
+    if os.path.isdir(dir_work_ndfd)==False:
+        print(dir_work_ndfd)
+        os.mkdir(dir_work_ndfd)
+    basin_str = os.path.splitext(os.path.basename(cfg.basin_poly_path))[0]
+    chr_rm = [":"]
+    proj_str = ''.join(i for i in crs_out if not i in chr_rm)
+    dtype_out = 'float64'
+
+    # retrieve data for forecast length desired
+    # forecasts are stored in three files:
+    #   1-3 days
+    #   4-7 days
+    #   8-450 days - not used
+    flen_dirs = ['VP.001-003', 'VP.004-007']
+    if flen in range(1,4):
+        iflen = 1
+    elif flen in range(3,8):
+        iflen = 2
+    else:
+        error('flen must be between 1 and 7')
+    print(iflen)
+
+    # qpf only available for 1-3 days
+    if parameter == 'qpf'or parameter == 'snow':
+        iflen = 1
+
+    for i in range(0,iflen):
+        grib_name_url = 'ds.' + parameter + '.bin'
+        grib_name_path = parameter + '_' + flen_dirs[i] + '.bin'
+        grib_url = cfg.host_ndfd + flen_dirs[i] + '/' + grib_name_url
+        grib_path = dir_work_ndfd + grib_name_path
+
+        if os.path.isfile(grib_path) and overwrite_flag:
+            os.remove(grib_path)
+
+        if not os.path.isfile(grib_path):
+            logger.info("download_ndfd: downloading from {}".format(grib_url))
+            logger.info("download_ndfd: downloading to {}".format(grib_path))
+            try:
+                urllib.request.urlretrieve(grib_url, grib_path)
+            except IOError as e:
+                logger.error("download_ndfd: error downloading")
+                logging.error(e)
+        # read grib with pygrib to get message info
+        grbs = pygrib.open(grib_path)
+         # read first message to get forcast init time
+        grb = grbs[1]
+        date_init_str = str(grb).split('from ',1)[1].split(':',1)[0]
+        date_init = dt.datetime.strptime(date_init_str, '%Y%m%d%H%M')
+
+
+        # read grib as raster; reproject, write out individual forecast tifs,
+        # clip data
+        tif_out_head = dir_work_ndfd + parameter + '_' + date_init_str + '_'
+        with rasterio.open(grib_path) as src:
+            transform, width, height = calculate_default_transform(
+                src.crs, crs_out, src.width, src.height, *src.bounds)
+            kwargs = src.meta.copy()
+            kwargs.update({
+                'crs': crs_out,
+                'transform': transform,
+                'width': width,
+                'height': height,
+                'count': 1
+            })
+
+            for bnd in range(1, src.count + 1):
+                grb = grbs[bnd]
+
+                # read valid date from grb message
+                valid_date_str = dt.datetime.strftime(grb.validDate, '%Y%m%d%H%M')
+                tif_out_band = tif_out_head + valid_date_str + '.tif'
+                with rasterio.open(tif_out_band, 'w', **kwargs) as dst:
+                    reproject(
+                        source=rasterio.band(src, bnd),
+                        destination=rasterio.band(dst, 1),
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=transform,
+                        dst_crs=crs_out,
+                        resampling=Resampling.nearest)
+        grbs.close()
+
+        # clip to basin polygon
+        tif_list = glob.glob("{0}/*{1}*{2}*.tif".format(dir_work_ndfd, parameter, date_init_str))
+        for tif in tif_list:
+            date_valid_str = tif.split("_")[2].split(".")[0]
+            tif_out = dir_work_ndfd + "ndfd_" + parameter + "_" + date_init_str + "_" + date_valid_str + "_" + basin_str + ".tif"
+            try:
+                gdal_raster_clip(cfg.basin_poly_path, tif, tif_out, crs_out, crs_out, -9999)
+                logger.info("download_ndfd: clipping {} to {}".format(tif, tif_out))
+            except:
+                logger.error("download_ndfd: error clipping {} to {}".format(tif, tif_out))
+        if not tif_list:
+            logger.error("download_ndfd: error finding tifs to clip")
+
+        # convert units
+        tif_list = glob.glob("{0}/*{1}*{2}*{3}*.tif".format(dir_work_ndfd, 'ndfd', parameter, date_init_str))
+        ct_flag = False
+        # mm to inches conversion
+        if parameter == 'snow':
+            if cfg.unit_sys == 'english':
+                calc_exp = '(+ 1 (* 39.3701 (read 1)))' # inches
+            if cfg.unit_sys == 'metric':
+                calc_exp = '(+ 1 (/ 1000 (read 1)))' # mm
+                
+        if parameter == "qpf":
+            if cfg.unit_sys == 'english':
+                calc_exp = '(+ 0.04 (* 0.04 (read 1)))' # convert from kg/m2 to inches of water
+            if cfg.unit_sys == 'metric':
+                calc_exp = '(read 1)' # keep units in percentage
+                
+        if (parameter == 'pop12') or (parameter == "sky") or (parameter == "rhm"):
+            if cfg.unit_sys == 'english':
+                calc_exp = '(read 1)' # keep units in percentage
+            if cfg.unit_sys == 'metric':
+                calc_exp = '(read 1)' # keep units in percentage
+
+        # c to f conversion
+        if parameter == 'mint' or parameter == 'maxt':
+            if cfg.unit_sys == 'english':
+                ct_flag = True
+                calc_exp = '(+ 1 (* 1.8 (read 1)))' # deg. F (mult)
+                calc_exp2 = '(+ 1 (+ 32 (read 1)))' # deg. F (add)
+
+            if cfg.unit_sys == 'metric':
+                calc_exp = '(read 1)' # keep units in deg. C
+
+        tif_list = glob.glob("{0}/*{1}*{2}*{3}*{4}*.tif".format(dir_work_ndfd, 'ndfd', parameter, date_init_str, basin_str))
+
+        for tif in tif_list:
+            tif_int = os.path.splitext(tif)[0] + "_" + dtype_out + ".tif"
+            if ct_flag == True:
+                tif_int2 = os.path.splitext(tif)[0] + "_mult" + ".tif"
+            tif_out = cfg.dir_db + os.path.splitext(os.path.basename(tif))[0] + "_" + cfg.unit_sys + ".tif"
+            try:
+                rio_dtype_conversion(tif, tif_int, dtype_out)
+                if ct_flag == True:
+                    rio_calc(tif_int, tif_int2, calc_exp)
+                    rio_calc(tif_int2, tif_out, calc_exp2)
+                if ct_flag == False:
+                    rio_calc(tif_int, tif_out, calc_exp)
+                logger.info("download_ndfd: calc {} {} to {}".format(calc_exp, tif, tif_out))
+            except:
+                logger.error("download_ndfd: error calc {} to {}".format(tif, tif_out))
+        if not tif_list:
+            logger.error("download_ndfd: error finding tifs to calc")
+
+        # end of iflen loop
+        # save grib file for archiving - currently saved to the database directory with init date appended to filename
+        shutil.move(grib_path, cfg.dir_db + os.path.splitext(os.path.basename(grib_path))[0] + '_' + date_init_str + '.bin')
+
+        # calculate zonal statistics and export data
+        tif_list = glob.glob("{0}/{1}*{2}*{3}*{4}*{5}.tif".format(cfg.dir_db, 'ndfd', parameter, date_init_str, basin_str, cfg.unit_sys))
+
+        for tif in tif_list:
+            file_meta = os.path.basename(tif).replace('.', '_').split('_')
+
+            if 'poly' in cfg.output_type:
+                try:
+                    tif_stats = zonal_stats(cfg.basin_poly_path, tif, stats=['min', 'max', 'median', 'mean'], all_touched=True)
+                    tif_stats_df = pd.DataFrame(tif_stats)
+                    logger.info("download_ndfd: computing zonal statistics")
+                except:
+                    logger.error("download_ndfd: error computing poly zonal statistics")
+                try:
+                    frames = [cfg.basin_poly, tif_stats_df]
+                    basin_poly_stats = pd.concat(frames, axis=1)
+                    logger.info("download_ndfd: merging poly zonal statistics")
+                except:
+                    logger.error("download_ndfd: error merging zonal statistics")
+
+                if 'geojson' in cfg.output_format:
+                    try:
+                        geojson_out = os.path.splitext(tif)[0] + "_poly.geojson"
+                        basin_poly_stats.to_file(geojson_out, driver='GeoJSON')
+                        logger.info("download_ndfd: writing {0}".format(geojson_out))
+                    except:
+                        logger.error("download_ndfd: error writing {0}".format(geojson_out))
+                if 'csv' in cfg.output_format:
+                    try:
+                        csv_out = os.path.splitext(tif)[0] + "_poly.csv"
+                        basin_poly_stats_df = pd.DataFrame(basin_poly_stats.drop(columns = 'geometry'))
+                        basin_poly_stats_df.insert(0, 'Source', file_meta[0])
+                        basin_poly_stats_df.insert(0, 'Type', file_meta[1])
+                        basin_poly_stats_df.insert(0, 'Date_Init', dt.datetime.strptime(file_meta[2], '%Y%m%d%H%M').strftime('%Y-%m-%d %H:%M'))
+                        basin_poly_stats_df.insert(0, 'Date_Valid', dt.datetime.strptime(file_meta[3], '%Y%m%d%H%M').strftime('%Y-%m-%d %H:%M'))
+                        basin_poly_stats_df.to_csv(csv_out, index=False)
+                        logger.info("download_ndfd: writing {0}".format(csv_out))
+                    except:
+                        logger.error("download_ndfd: error writing {0}".format(csv_out))
+
+            if 'points' in cfg.output_type:
+                try:
+                    tif_stats = zonal_stats(cfg.basin_points_path, tif, stats=['min', 'max', 'median', 'mean'], all_touched=True)
+                    tif_stats_df = pd.DataFrame(tif_stats)
+                    logger.info("download_ndfd: computing points zonal statistics")
+                except:
+                    logger.error("download_ndfd: error computing points zonal statistics")
+                try:
+                    frames = [cfg.basin_points, tif_stats_df]
+                    basin_points_stats = pd.concat(frames, axis=1)
+                    logger.info("download_ndfd: merging zonal statistics")
+                except:
+                    logger.error("download_ndfd: error merging zonal statistics")
+                if 'geojson' in cfg.output_format:
+                    try:
+                        geojson_out = os.path.splitext(tif)[0] + "_points.geojson"
+                        basin_points_stats.to_file(geojson_out, driver='GeoJSON')
+                        logger.info("download_ndfd: writing {0}".format(geojson_out))
+                    except:
+                        logger.error("download_ndfd: error writing {0}".format(geojson_out))
+                if 'csv' in cfg.output_format:
+                    try:
+                        csv_out = os.path.splitext(tif)[0] + "_points.csv"
+                        basin_points_stats_df = pd.DataFrame(basin_points_stats.drop(columns = 'geometry'))
+                        basin_points_stats_df.insert(0, 'Source', file_meta[0])
+                        basin_points_stats_df.insert(0, 'Type', file_meta[1])
+                        basin_points_stats_df.insert(0, 'Date_Init', dt.datetime.strptime(file_meta[2], '%Y%m%d%H%M').strftime('%Y-%m-%d %H:%M'))
+                        basin_points_stats_df.insert(0, 'Date_Valid', dt.datetime.strptime(file_meta[3], '%Y%m%d%H%M').strftime('%Y-%m-%d %H:%M'))
+                        basin_points_stats_df.to_csv(csv_out, index=False)
+                        logger.info("download_ndfd: writing {0}".format(csv_out, index=False))
+                    except:
+                        logger.error("download_ndfd: error writing {0}".format(csv_out))
+
+        # clean up working directory
+        for file in os.listdir(dir_work_ndfd):
+            file_path = dir_work_ndfd + file
+            try:
+                os.remove(file_path)
+                logger.info("download_ndfd: removing {}".format(file_path))
+            except:
+                logger.error("download_ndfd: error removing {}".format(file_path))
+
+
+
+
+
+
+
 
 def gdal_raster_reproject(file_in, file_out, crs_out, crs_in = None):
     """wrapper around gdalwarp for reprojecting rasters
