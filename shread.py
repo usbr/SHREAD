@@ -2480,7 +2480,7 @@ def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
                 
         if parameter == "qpf":
             if cfg.unit_sys == 'english':
-                calc_exp = '(+ 0.04 (* 0.04 (read 1)))' # convert from kg/m2 to inches of water
+                calc_exp = '(+ 1 (* 0.04 (read 1)))' # convert from kg/m2 to inches of water
             if cfg.unit_sys == 'metric':
                 calc_exp = '(read 1)' # keep units in percentage
                 
