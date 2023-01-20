@@ -913,7 +913,7 @@ def org_snodas(cfg, date_dn):
 
     # convert units
     if cfg.unit_sys == 'english':
-        calc_exp = '(+ 1 (* .0393701 (read 1)))' # inches
+        calc_exp = '(* .0393701 (read 1))' # inches
     if cfg.unit_sys == 'metric':
         calc_exp = '(read 1)' # keep units in mm
     # SWE
@@ -2187,7 +2187,7 @@ def org_swann(cfg, date_dn, ftype):
 
     # convert units
     if cfg.unit_sys == 'english':
-        calc_exp = '(+ 1 (* .0393701 (read 1)))' # inches
+        calc_exp = '(* .0393701 (read 1))' # inches
     if cfg.unit_sys == 'metric':
         calc_exp = '(read 1)' # keep units in mm
     # SWE
@@ -2474,13 +2474,13 @@ def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
         # mm to inches conversion
         if parameter == 'snow':
             if cfg.unit_sys == 'english':
-                calc_exp = '(+ 1 (* 39.3701 (read 1)))' # inches
+                calc_exp = '(+0.1 (* 39.3701 (read 1)))' # inches
             if cfg.unit_sys == 'metric':
-                calc_exp = '(+ 1 (/ 1000 (read 1)))' # mm
+                calc_exp = '(+1 (/ 1000 (read 1)))' # mm
                 
         if parameter == "qpf":
             if cfg.unit_sys == 'english':
-                calc_exp = '(+ 1 (* 0.04 (read 1)))' # convert from kg/m2 to inches of water
+                calc_exp = '(+0.1 (* 0.04 (read 1)))' # convert from kg/m2 to inches of water
             if cfg.unit_sys == 'metric':
                 calc_exp = '(read 1)' # keep units in percentage
                 
@@ -2494,8 +2494,8 @@ def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
         if parameter == 'mint' or parameter == 'maxt':
             if cfg.unit_sys == 'english':
                 ct_flag = True
-                calc_exp = '(+ 1 (* 1.8 (read 1)))' # deg. F (mult)
-                calc_exp2 = '(+ 1 (+ 32 (read 1)))' # deg. F (add)
+                calc_exp = '(* 1.8 (read 1))' # deg. F (mult)
+                calc_exp2 = '(+ 32 (read 1))' # deg. F (add)
 
             if cfg.unit_sys == 'metric':
                 calc_exp = '(read 1)' # keep units in deg. C
