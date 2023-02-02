@@ -2474,9 +2474,7 @@ def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
         # mm to inches conversion
         if parameter == 'snow':
             if cfg.unit_sys == 'english':
-                ct_flag = True
                 calc_exp = '(+0.1 (* 39.3701 (read 1)))' # inches
-                calc_exp2 = '(* (< (read 1) 0) 0)' # replace negative numbers
             if cfg.unit_sys == 'metric':
                 calc_exp = '(+1 (/ 1000 (read 1)))' # mm
                 
