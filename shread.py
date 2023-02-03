@@ -217,14 +217,12 @@ def main(config_path, start_date, end_date, time_int, prod_str):
     
     if 'ndfd' in prod_list:
         import_flag = True
-        for date_dn in date_list:
-            print(date_dn)
-            error_flag = False
-            if import_flag:
-                Parallel(n_jobs=6)(delayed(ndfd_func)(p) for p in cfg.ndfd_parameters)
-                import_flag = False
-            else:
-                print("Importing ndfd only once...skipping")
+        error_flag = False
+        if import_flag:
+            Parallel(n_jobs=6)(delayed(ndfd_func)(p) for p in cfg.ndfd_parameters)
+            import_flag = False
+        else:
+            print("Importing ndfd only once...skipping")
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -2474,13 +2472,13 @@ def download_ndfd(parameter, flen, crs_out, cfg, overwrite_flag=False):
         # mm to inches conversion
         if parameter == 'snow':
             if cfg.unit_sys == 'english':
-                calc_exp = '(+0.1 (* 39.3701 (read 1)))' # inches
+                calc_exp = '(* 39.3701 (read 1))' # inches
             if cfg.unit_sys == 'metric':
-                calc_exp = '(+1 (/ 1000 (read 1)))' # mm
+                calc_exp = '(/ 1000 (read 1))' # mm
                 
         if parameter == "qpf":
             if cfg.unit_sys == 'english':
-                calc_exp = '(+0.1 (* 0.04 (read 1)))' # convert from kg/m2 to inches of water
+                calc_exp = '(* 0.04 (read 1))' # convert from kg/m2 to inches of water
             if cfg.unit_sys == 'metric':
                 calc_exp = '(read 1)' # keep units in percentage
                 
