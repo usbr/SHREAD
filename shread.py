@@ -105,8 +105,18 @@ def main(config_path, start_date, end_date, time_int, prod_str):
     cfg.read_config(config_path)
     cfg.proc_config()
     # develop date list
-    start_date = dt.datetime.strptime(start_date, '%Y%m%d')
-    end_date = dt.datetime.strptime(end_date, '%Y%m%d')
+    if len(start_date) == 8:
+        start_date = dt.datetime.strptime(start_date, '%Y%m%d')
+        end_date = dt.datetime.strptime(end_date, '%Y%m%d')
+    else:
+        try:
+            delta = abs(int(start_date))
+        except ValueError:
+            logger.info("download_ndfd: input start_date invalid")
+            error_flag = True
+            print("fail!")
+        end_date = dt.datetime.today()
+        start_date = end_date + dt.timedelta(days=1-delta)
 
     date_list = pd.date_range(start_date, end_date, freq=time_int).tolist()
     # create list of products
