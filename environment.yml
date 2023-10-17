@@ -13,7 +13,7 @@ dependencies:
   - fiona
   - lxml
   - rasterstats
-  - rasterio
+  - rasterio=1.3.3
   - jupyter
   - tzlocal
   - netcdf4
